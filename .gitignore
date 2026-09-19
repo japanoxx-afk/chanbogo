@@ -1,0 +1,7 @@
+bin/
+dist/
+runtime/
+*.log
+game-path.txt
+low-latency.txt
+update.log
