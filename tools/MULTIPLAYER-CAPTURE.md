@@ -1,4 +1,12 @@
-# Multiplayer timing capture v1
+# Multiplayer timing capture v2
+
+Version 2 adds current/target command lead and outgoing queued byte count at
+about 20ms intervals. Only the byte count is read, NEVER command contents.
+The queue is at 0x71BF08 + 4, read by 0x448772 when sending at 0x450C80.
+Samples can miss brief queue changes; this is not click-to-movement measurement.
+The reports folder is now created before game validation. Failures write a
+sanitized capture-error file with a fixed stage name (no exception messages,
+paths or network data). A folder creation failure can only be shown on screen.
 
 This is a diagnostic tool, not a latency fix. It reads a verified game build
 without attaching a debugger or changing game memory, simulation or networking.
@@ -24,7 +32,7 @@ to `diagnostics-public/<test-code>/host` or `client` with user authorization.
 Never use `git add .` on diagnostic folders.
 
 Counter differences are not measured command latency or ping. Sampling is about
-50ms, individual reads are not atomic, and host/client clocks are not synchronized.
+20ms, individual reads are not atomic, and host/client clocks are not synchronized.
 Compare common counter ranges, not just the elapsed timestamps on different PCs.
 If the game exits or reading fails, a partial report may remain; it is not a
 completed capture. Normal completed captures print `Saved`.
