@@ -31,6 +31,29 @@ namespace ChangpogoLauncher {
       if(!File.Exists(ini)||!File.Exists(wrapper)||!File.Exists(Path.Combine(directory,"DDraw.dll")))
         throw new FileNotFoundException("화면 설정에 필요한 Changpogo.ini, dgVoodoo.conf, DDraw.dll을 게임 폴더에서 찾을 수 없습니다.");
       var encoding=Encoding.GetEncoding(28591);
+      if(compatibility) {
+        // Restore the pre-launcher profile as a pair. Do not partially restore it.
+        bool iniBackup=File.Exists(ini+".launcher-display.bak"),wrapperBackup=File.Exists(wrapper+".launcher-display.bak");
+        if(iniBackup!=wrapperBackup)throw new IOException("화면 설정 백업이 한 개만 있습니다. 두 설정의 원본 백업을 확인하세요.");
+        if(iniBackup) {
+          string savedIni=File.ReadAllText(ini+".launcher-display.bak",encoding);
+          string savedWrapper=Set(File.ReadAllText(wrapper+".launcher-display.bak",encoding),"DirectX","DisableAltEnterToToggleScreenMode","true");
+          foreach(string file in new[]{ini,wrapper})
+            if(!File.Exists(file+".before-safe-profile.bak"))File.Copy(file,file+".before-safe-profile.bak");
+          if(File.ReadAllText(ini,encoding)!=savedIni)Save(ini,savedIni);
+          if(File.ReadAllText(wrapper,encoding)!=savedWrapper)Save(wrapper,savedWrapper);
+        }
+        else {
+          string current=File.ReadAllText(wrapper,encoding);
+          string protectedConfig=Set(current,"DirectX","DisableAltEnterToToggleScreenMode","true");
+          if(current!=protectedConfig) {
+            // Save both originals before making the first change.
+            if(!File.Exists(ini+".launcher-display.bak"))File.Copy(ini,ini+".launcher-display.bak");
+            Save(wrapper,protectedConfig);
+          }
+        }
+        return;
+      }
       string config=File.ReadAllText(wrapper,encoding);
       config=Set(config,"General","FullScreenMode","false");
       // Launcher owns clipping so it can release immediately on focus loss/F8.
@@ -38,6 +61,7 @@ namespace ChangpogoLauncher {
       config=Set(config,"General","CenterAppWindow","true");
       config=Set(config,"General","ScalingMode",widescreen?"stretched":"stretched_ar");
       config=Set(config,"DirectX","AppControlledScreenMode","false");
+      config=Set(config,"DirectX","DisableAltEnterToToggleScreenMode","true");
       config=Set(config,"DirectX","Resolution",widescreen?"h:1280, v:720":"unforced");
       // Conservative A/B profile; this is not a confirmed minimap fix.
       // Set both branches explicitly so turning the option off restores the launcher profile.
@@ -52,9 +76,7 @@ namespace ChangpogoLauncher {
       string video=Set(File.ReadAllText(ini,encoding),"VideoState","Fullscreen","1");
       video=Set(video,"VideoState","Width","1280");
       video=Set(video,"VideoState","Height","960");
-      // The black minimap reproduces with 32-bit surfaces. The user confirmed
-      // visibility after switching to 16-bit; keep this explicit on every launch.
-      video=Set(video,"VideoState","Depth",compatibility?"16":"32");
+      video=Set(video,"VideoState","Depth","32");
       Save(ini,video);
     }
   }

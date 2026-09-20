@@ -12,8 +12,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Changpogo Launcher")]
-[assembly: AssemblyVersion("1.4.1.0")]
-[assembly: AssemblyFileVersion("1.4.1.0")]
+[assembly: AssemblyVersion("1.4.3.0")]
+[assembly: AssemblyFileVersion("1.4.3.0")]
 
 namespace ChangpogoLauncher {
   static class Program {
@@ -27,7 +27,7 @@ namespace ChangpogoLauncher {
   }
 
   sealed class LauncherForm : Form {
-    const string VersionText="1.4.1";
+    const string VersionText="1.4.3";
     const string DefaultGame=@"C:\Users\seo\Downloads\DGGL\Games\Changpogo_Win_260708\Changpogo.exe";
     readonly TextBox gamePath=new TextBox();
     readonly TextBox log=new TextBox();
@@ -40,7 +40,7 @@ namespace ChangpogoLauncher {
     readonly CheckBox widescreen=new CheckBox { Text="16:9 표시 (원본 화면 가로 확장)",AutoSize=true };
     MouseCapture mouseSession;
     GameDiagnostics diagnostics;
-    readonly CheckBox compatibility=new CheckBox { Text="미니맵 호환 모드 (16비트 색상 · 권장)",AutoSize=true };
+    readonly CheckBox compatibility=new CheckBox { Text="미니맵 정상 설정 복원·유지 (화면 강제 설정 안 함)",AutoSize=true };
     readonly CheckBox diagnosticMode=new CheckBox { Text="충돌·멀티 진단 기록 (로컬 메모리 덤프 · 자동 전송 없음)",AutoSize=true };
 
     public LauncherForm() {
@@ -61,7 +61,9 @@ namespace ChangpogoLauncher {
       captureMouse.Checked=LoadSetting("capture-mouse.txt","true")=="true";captureMouse.Location=new Point(290,250);
       Controls.AddRange(new Control[]{display,captureMouse});
       widescreen.Checked=LoadSetting("widescreen.txt","true")=="true";widescreen.Location=new Point(20,280);Controls.Add(widescreen);
-      compatibility.Checked=LoadSetting("graphics-compatibility.txt","true")=="true";compatibility.Location=new Point(20,313);
+      compatibility.Checked=LoadSetting("preserve-display-profile.txt","true")=="true";compatibility.Location=new Point(20,313);
+      compatibility.CheckedChanged+=(s,e)=>{display.Enabled=!compatibility.Checked;widescreen.Enabled=!compatibility.Checked;};
+      display.Enabled=!compatibility.Checked;widescreen.Enabled=!compatibility.Checked;
       diagnosticMode.Checked=LoadSetting("diagnostics.txt","true")=="true";diagnosticMode.Location=new Point(20,346);
       Controls.AddRange(new Control[]{compatibility,diagnosticMode});
       Controls.Add(new Label { Text="문제 발생 시 F9: 시점 기록 · 종료 후 진단 폴더 확인",AutoSize=true,Location=new Point(20,380),ForeColor=Color.DimGray });
@@ -93,7 +95,7 @@ namespace ChangpogoLauncher {
         SaveSetting("command-latency.txt",commandLatency.Checked?"true":"false");
         if(Process.GetProcessesByName("Changpogo").Length>0)throw new InvalidOperationException("실행 중인 게임을 종료한 뒤 화면 설정을 적용하세요.");
         DisplayOptions.PrepareCompatible(source,display.SelectedIndex==1,widescreen.Checked,compatibility.Checked);
-        SaveSetting("graphics-compatibility.txt",compatibility.Checked?"true":"false");SaveSetting("diagnostics.txt",diagnosticMode.Checked?"true":"false");
+        SaveSetting("preserve-display-profile.txt",compatibility.Checked?"true":"false");SaveSetting("diagnostics.txt",diagnosticMode.Checked?"true":"false");
         SaveSetting("widescreen.txt",widescreen.Checked?"true":"false");
         SaveSetting("display-mode.txt",display.SelectedIndex.ToString());SaveSetting("capture-mouse.txt",captureMouse.Checked?"true":"false");
         if(diagnosticMode.Checked) {
@@ -103,9 +105,10 @@ namespace ChangpogoLauncher {
         process=SinglePlayerPatch.StartObserved(source,commandLatency.Checked,diagnostics==null?(Action<Process>)null:diagnostics.Attach);
         if(process==null)throw new InvalidOperationException("게임 프로세스를 시작하지 못했습니다.");
         mouseSession=new MouseCapture(process,captureMouse.Checked,WriteLog);
-        WriteLog("화면: "+display.Text+" / F8: 마우스 가두기 전환 / Alt+Tab: 자동 해제");
-        WriteLog(widescreen.Checked?"16:9 가로 확장 표시 (네이티브 와이드 아님)":"4:3 원본 비율");
-        if(compatibility.Checked)WriteLog("미니맵 호환 모드: 16비트 색상 / 원본 렌더 해상도 / 빠른 비디오 메모리·RT 강제 스케일 해제. 색상 계조가 줄어들 수 있습니다.");
+        WriteLog("화면: "+(compatibility.Checked?"원본 설정 유지":display.Text)+" / F8: 마우스 가두기 전환 / Alt+Tab: 자동 해제");
+        if(!compatibility.Checked)WriteLog(widescreen.Checked?"16:9 가로 확장 표시 (네이티브 와이드 아님)":"4:3 원본 비율");
+        if(compatibility.Checked)WriteLog("최초 화면 설정 백업이 있으면 복원, 없으면 현재 설정 유지. 전체화면·16:9·해상도·색상 강제 변경 없음.");
+        WriteLog("Alt+Enter: dgVoodoo 화면 전환 비활성화 적용.");
         session=new LowLatencySession();if(lowLatency.Checked)try { session.Begin(process); }catch(Exception ex) { WriteLog("실행 보조 설정 실패 (게임은 계속 실행): "+ex.Message); }
         WriteLog("게임 시작 PID="+process.Id+" / 싱글 명령 패치="+commandLatency.Checked);
         if(commandLatency.Checked)WriteLog("싱글 명령 묶음 200→50ms / 시뮬레이션 진행량 보정 / 멀티는 기존 경로");
