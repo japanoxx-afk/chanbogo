@@ -1,4 +1,16 @@
-# Multiplayer timing capture v2
+# Multiplayer timing capture v3
+
+Version 3 samples only right mouse button down/up state while the game is the
+foreground application, alongside the counters. No keyboard keys, coordinates,
+window titles or other applications' input are recorded. A short click can be
+missed between 20ms samples. This identifies approximate input timing, NOT when
+a unit begins moving. Match individual, spaced orders to queue transitions with
+caution: multiple orders and transient zero-length queues are ambiguous.
+
+Blank interactive test code defaults to mp-test-04; invalid roles are re-prompted.
+An explicit Recording message shows when sampling starts. Host.cmd / Client.cmd
+preselect the role/code and pause after completion or failure. Enter the multiplayer
+match BEFORE running these files. Return to the game after Recording appears.
 
 Version 2 adds current/target command lead and outgoing queued byte count at
 about 20ms intervals. Only the byte count is read, NEVER command contents.
@@ -15,8 +27,9 @@ No installation or Python is required to run MultiplayerCapture.exe on Windows.
 1. Both players enter the same LAN match using the same launcher/game settings.
 2. Run MultiplayerCapture.exe. Enter `host` on the host PC, `client` on the peer PC.
 3. Both enter the agreed non-personal test code, for example `mp-test-01`.
-4. For 60 seconds, play normally and issue movement/attack orders. Start at roughly
-   the same time where possible. There is no input capture or command timestamping.
+4. For 60 seconds, issue a right-click movement order about every three seconds.
+   Start at roughly the same time. Only right-button state is sampled; it is not
+   a record of actual engine command execution.
 5. The tool creates one CSV under `reports` beside the tool. Send only that CSV.
    Do not send the launcher's original Diagnostics folders or crash.dmp publicly.
 

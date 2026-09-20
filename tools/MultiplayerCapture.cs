@@ -9,6 +9,9 @@ using System.Threading;
 
 // Read-only, public-shareable numeric telemetry. No debugger, packet capture or dumps.
 class MultiplayerCapture {
+  [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr window,out uint pid);
+  [DllImport("user32.dll")] static extern short GetAsyncKeyState(int key);
   [DllImport("kernel32.dll",SetLastError=true)] static extern IntPtr OpenProcess(uint access,bool inherit,int pid);
   [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
   [DllImport("kernel32.dll",SetLastError=true)] static extern bool ReadProcessMemory(IntPtr handle,IntPtr address,byte[] buffer,UIntPtr size,out UIntPtr read);
@@ -24,8 +27,11 @@ class MultiplayerCapture {
       folder=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"reports");Directory.CreateDirectory(folder);
       stage="arguments";
       Console.WriteLine("Multiplayer timing capture: local CSV only; no automatic upload.");
-      string role=args.Length>0?args[0]:Prompt("Role (host / client): ");
-      string session=args.Length>1?args[1]:Prompt("Shared test code (example mp-test-01): ");
+      string role=args.Length>0?args[0]:Prompt("Role (host / client): ").ToLowerInvariant();
+      while(args.Length==0&&role!="host"&&role!="client")role=Prompt("Please enter host or client: ").ToLowerInvariant();
+      string session=args.Length>1?args[1]:Prompt("Shared test code [Enter = mp-test-04]: ");
+      if(args.Length<2&&session.Length==0)session="mp-test-04";
+      while(args.Length<2&&!Regex.IsMatch(session,@"\A[a-z0-9-]{1,32}\z"))session=Prompt("Use lowercase letters, numbers or hyphens: ");
       if(role!="host"&&role!="client")throw new ArgumentException("Role must be host or client");
       if(!Regex.IsMatch(session,@"\A[a-z0-9-]{1,32}\z"))throw new ArgumentException("Use only lowercase letters, numbers and hyphens for test code; no personal information");
       int seconds=args.Length>2?int.Parse(args[2]):60;
@@ -44,10 +50,14 @@ class MultiplayerCapture {
         stage="write_samples";
         string output=Path.Combine(folder,session+"-"+role+"-"+Guid.NewGuid().ToString("N").Substring(0,8)+".csv");
         using(var writer=new StreamWriter(new FileStream(output,FileMode.CreateNew,FileAccess.Write),new UTF8Encoding(false))) {
-          writer.WriteLine("schema,session,role,elapsed_ms,mode,active,net_state,counter_0c,counter_14,readiness_block,scheduler_clock,drift_accumulator,lead_current,lead_target,queued_command_bytes");
+          writer.WriteLine("schema,session,role,elapsed_ms,mode,active,net_state,counter_0c,counter_14,readiness_block,scheduler_clock,drift_accumulator,lead_current,lead_target,queued_command_bytes,game_foreground,right_button_down");
+          Console.WriteLine("Recording for "+seconds+" seconds. Return to the game and issue separate right-click orders. Only in-game right-button state is sampled; no text or coordinates.");
           var watch=Stopwatch.StartNew();long next=0;
           while(watch.ElapsedMilliseconds<seconds*1000L) {
-            writer.WriteLine("2,"+session+","+role+","+watch.ElapsedMilliseconds+","+Read(handle,0x70e8c4)+","+Read(handle,0x71ccfc)+","+Read(handle,0x71c7ec)+","+Read(handle,0x71c7f8)+","+Read(handle,0x71c800)+","+Read(handle,0x71ca84)+","+Read(handle,0x71d284)+","+unchecked((int)Read(handle,0x71d298))+","+Read(handle,0x71d288)+","+Read(handle,0x71d28c)+","+Read(handle,0x71bf0c));
+            uint foregroundPid;GetWindowThreadProcessId(GetForegroundWindow(),out foregroundPid);
+            bool foreground=foregroundPid==(uint)game.Id;
+            int right=foreground&&(GetAsyncKeyState(2)&0x8000)!=0?1:0;
+            writer.WriteLine("3,"+session+","+role+","+watch.ElapsedMilliseconds+","+Read(handle,0x70e8c4)+","+Read(handle,0x71ccfc)+","+Read(handle,0x71c7ec)+","+Read(handle,0x71c7f8)+","+Read(handle,0x71c800)+","+Read(handle,0x71ca84)+","+Read(handle,0x71d284)+","+unchecked((int)Read(handle,0x71d298))+","+Read(handle,0x71d288)+","+Read(handle,0x71d28c)+","+Read(handle,0x71bf0c)+","+(foreground?1:0)+","+right);
             next+=20;long delay=next-watch.ElapsedMilliseconds;if(delay>0)Thread.Sleep((int)delay);
           }
         }
@@ -64,5 +74,5 @@ class MultiplayerCapture {
       if(args.Length==0)Console.ReadLine();return 1;
     } finally {if(handle!=IntPtr.Zero)CloseHandle(handle);}
   }
-  static string Prompt(string message){Console.Write(message);return (Console.ReadLine()??"").Trim();}
+  static string Prompt(string message){Console.Write(message);string value=Console.ReadLine();if(value==null)throw new EndOfStreamException();return value.Trim();}
 }

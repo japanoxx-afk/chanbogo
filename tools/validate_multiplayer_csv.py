@@ -6,6 +6,7 @@ from pathlib import Path
 
 HEADER = 'schema,session,role,elapsed_ms,mode,active,net_state,counter_0c,counter_14,readiness_block,scheduler_clock,drift_accumulator'.split(',')
 HEADER2 = HEADER + ['lead_current', 'lead_target', 'queued_command_bytes']
+HEADER3 = HEADER2 + ['game_foreground', 'right_button_down']
 
 def validate(path, session, role):
     if not re.fullmatch(r'[a-z0-9-]{1,32}', session) or role not in ('host', 'client'):
@@ -15,9 +16,9 @@ def validate(path, session, role):
     with open(path, encoding='utf-8', newline='') as file:
         reader = csv.reader(file)
         header = next(reader)
-        if header not in (HEADER, HEADER2):
+        if header not in (HEADER, HEADER2, HEADER3):
             raise ValueError('Unexpected fields')
-        schema = '1' if header == HEADER else '2'
+        schema = str((HEADER, HEADER2, HEADER3).index(header) + 1)
         count, previous = 0, -1
         for row in reader:
             if len(row) != len(header) or row[:3] != [schema, session, role]:
@@ -25,6 +26,8 @@ def validate(path, session, role):
             if any(not re.fullmatch(r'-?[0-9]{1,10}', value) for value in row[3:]):
                 raise ValueError('Non-numeric telemetry')
             values = list(map(int, row[3:]))
+            if schema == '3' and (any(v not in (0, 1) for v in values[-2:]) or values[-1] > values[-2]):
+                raise ValueError('Invalid foreground/button state')
             if not previous <= values[0] <= 121000:
                 raise ValueError('Invalid elapsed time')
             drift_index = header.index('drift_accumulator') - 3
