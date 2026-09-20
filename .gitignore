@@ -5,6 +5,7 @@ runtime/
 game-path.txt
 low-latency.txt
 command-latency.txt
+multiplayer-latency.txt
 display-mode.txt
 widescreen.txt
 camera-distance.txt

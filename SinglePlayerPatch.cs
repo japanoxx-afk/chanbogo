@@ -37,6 +37,9 @@ namespace ChangpogoLauncher {
       return StartObserved(path,true,null);
     }
     internal static Process StartObserved(string path,bool latency,Action<Process> observe) {
+      return StartObserved(path,latency,false,observe);
+    }
+    internal static Process StartObserved(string path,bool latency,bool multiplayer,Action<Process> observe) {
       string hash,hex,relocations;
       using(var reader=new StreamReader(Assembly.GetExecutingAssembly().GetManifestResourceStream("latency.manifest"))) {
         hash=reader.ReadLine();hex=reader.ReadLine();relocations=reader.ReadLine();
@@ -44,13 +47,27 @@ namespace ChangpogoLauncher {
       // Keep the source locked against writes/replacement through process creation.
       using(var source=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read)) {
         using(var sha=SHA256.Create())
-          if(latency&&!string.Equals(BitConverter.ToString(sha.ComputeHash(source)).Replace("-",""),hash,StringComparison.OrdinalIgnoreCase))
+          if((latency||multiplayer)&&!string.Equals(BitConverter.ToString(sha.ComputeHash(source)).Replace("-",""),hash,StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("이 게임 버전은 명령 지연 패치 지원 대상이 아닙니다. 명령 지연 옵션을 끄면 원본으로 실행할 수 있습니다.");
         var si=new StartupInfo();si.cb=Marshal.SizeOf(typeof(StartupInfo));ProcessInfo pi;
         Require(CreateProcess(path,new StringBuilder(LauncherForm.Quote(path)),IntPtr.Zero,IntPtr.Zero,false,4,IntPtr.Zero,Path.GetDirectoryName(path),ref si,out pi));
         bool resumed=false;Process managed=null;
         try {
           UIntPtr count;
+          if(multiplayer) {
+            // Only the non-single-player initializer: push 3 -> push 2.
+            // Do not change turn cadence, readiness checks, packets or simulation speed.
+            var entry=new IntPtr(0x488ae1);var original=new byte[6];
+            Require(ReadProcessMemory(pi.process,entry,original,(UIntPtr)6,out count));
+            if(count.ToUInt64()!=6||BitConverter.ToString(original)!="6A-03-EB-02-6A-01")throw new InvalidDataException("멀티 명령 대기 초기화 코드 검증 실패");
+            var operand=new IntPtr(0x488ae2);uint old,unused;
+            Require(VirtualProtectEx(pi.process,operand,(UIntPtr)1,0x40,out old));
+            Require(WriteProcessMemory(pi.process,operand,new byte[]{2},(UIntPtr)1,out count));Require(count.ToUInt64()==1);
+            Require(VirtualProtectEx(pi.process,operand,(UIntPtr)1,old,out unused));
+            var verified=new byte[1];Require(ReadProcessMemory(pi.process,operand,verified,(UIntPtr)1,out count));
+            if(count.ToUInt64()!=1||verified[0]!=2)throw new InvalidDataException("멀티 명령 대기 패치 읽기 검증 실패");
+            Require(FlushInstructionCache(pi.process,operand,(UIntPtr)1));
+          }
           if(latency) {
           var original=new byte[6];
           Require(ReadProcessMemory(pi.process,new IntPtr(0x488bb3),original,(UIntPtr)6,out count));
