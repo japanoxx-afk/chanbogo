@@ -1,0 +1,83 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Windows.Forms;
+
+namespace ChangpogoLauncher {
+  static class DisplayOptions {
+    internal static string Set(string text,string section,string key,string value) {
+      var block=new Regex(@"(?ms)^\["+Regex.Escape(section)+@"\][^\r\n]*\r?\n.*?(?=^\[|\z)");
+      if(!block.IsMatch(text))return text+"\r\n["+section+"]\r\n"+key+" = "+value+"\r\n";
+      return block.Replace(text,m=> {
+        var setting=new Regex(@"(?m)^([ \t]*"+Regex.Escape(key)+@"[ \t]*=[ \t]*)[^\r\n]*");
+        return setting.IsMatch(m.Value)?setting.Replace(m.Value,x=>x.Groups[1].Value+value):m.Value.TrimEnd('\r','\n')+"\r\n"+key+" = "+value+"\r\n";
+      });
+    }
+    static void Save(string file,string text) {
+      string backup=file+".launcher-display.bak";
+      if(!File.Exists(backup))File.Copy(file,backup,false);
+      string temp=file+"."+Guid.NewGuid().ToString("N")+".tmp";
+      try { File.WriteAllText(temp,text,Encoding.GetEncoding(28591));File.Replace(temp,file,null); }
+      finally { if(File.Exists(temp))File.Delete(temp); }
+    }
+    internal static void Prepare(string game,bool borderless) {
+      string directory=Path.GetDirectoryName(game),ini=Path.Combine(directory,"Changpogo.ini"),wrapper=Path.Combine(directory,"dgVoodoo.conf");
+      if(!File.Exists(ini)||!File.Exists(wrapper)||!File.Exists(Path.Combine(directory,"DDraw.dll")))
+        throw new FileNotFoundException("화면 설정에 필요한 Changpogo.ini, dgVoodoo.conf, DDraw.dll을 게임 폴더에서 찾을 수 없습니다.");
+      var encoding=Encoding.GetEncoding(28591);
+      string config=File.ReadAllText(wrapper,encoding);
+      config=Set(config,"General","FullScreenMode","false");
+      // Launcher owns clipping so it can release immediately on focus loss/F8.
+      config=Set(config,"General","CaptureMouse","false");
+      config=Set(config,"General","CenterAppWindow","true");
+      config=Set(config,"GeneralExt","WindowedAttributes",borderless?"borderless, fullscreensize":"");
+      config=Set(config,"GeneralExt","FullscreenAttributes","fake");
+      Save(wrapper,config);
+      Save(ini,Set(File.ReadAllText(ini,encoding),"VideoState","Fullscreen","0"));
+    }
+  }
+
+  sealed class MouseCapture : IDisposable {
+    [StructLayout(LayoutKind.Sequential)] struct Rect { public int left,top,right,bottom; }
+    [StructLayout(LayoutKind.Sequential)] struct Point { public int x,y; }
+    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr window,out uint pid);
+    [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr window,out Rect rect);
+    [DllImport("user32.dll")] static extern bool ClientToScreen(IntPtr window,ref Point point);
+    [DllImport("user32.dll")] static extern bool IsIconic(IntPtr window);
+    [DllImport("user32.dll")] static extern bool ClipCursor(ref Rect rect);
+    [DllImport("user32.dll",EntryPoint="ClipCursor")] static extern bool ReleaseCursor(IntPtr rect);
+    [DllImport("user32.dll")] static extern short GetAsyncKeyState(int key);
+    [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
+    readonly Timer timer=new Timer { Interval=30 };
+    readonly Process game;
+    readonly Action<string> log;
+    bool clipped,enabled,lastF8,disposed;
+    public static void InitializeDpi() { SetProcessDPIAware(); }
+    public MouseCapture(Process process,bool capture,Action<string> logger) {
+      game=process;enabled=capture;log=logger;timer.Tick+=(s,e)=>Tick();timer.Start();
+    }
+    void Release() { if(clipped) { ReleaseCursor(IntPtr.Zero);clipped=false; } }
+    void Tick() {
+      if(disposed)return;
+      try {
+        if(game.HasExited) { Dispose();return; }
+        IntPtr window=GetForegroundWindow();uint pid;GetWindowThreadProcessId(window,out pid);
+        bool active=pid==(uint)game.Id&&!IsIconic(window);
+        bool f8=(GetAsyncKeyState(0x77)&0x8000)!=0;
+        if(active&&f8&&!lastF8) { enabled=!enabled;log("마우스 가두기 "+(enabled?"켜짐":"해제됨")+" (F8)"); }
+        lastF8=f8;
+        if(!active||!enabled) { Release();return; }
+        Rect client;if(!GetClientRect(window,out client)||client.right<=0||client.bottom<=0) { Release();return; }
+        Point first=new Point(),last=new Point { x=client.right,y=client.bottom };
+        if(!ClientToScreen(window,ref first)||!ClientToScreen(window,ref last)) { Release();return; }
+        var rect=new Rect { left=first.x,top=first.y,right=last.x,bottom=last.y };
+        clipped=ClipCursor(ref rect)||clipped;
+      } catch(InvalidOperationException) { Dispose(); }
+    }
+    public void Dispose() { if(disposed)return;disposed=true;timer.Stop();timer.Dispose();Release(); }
+  }
+}

@@ -5,5 +5,7 @@ runtime/
 game-path.txt
 low-latency.txt
 command-latency.txt
+display-mode.txt
+capture-mouse.txt
 __pycache__/
 update.log
