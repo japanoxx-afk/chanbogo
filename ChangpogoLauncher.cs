@@ -12,8 +12,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Changpogo Launcher")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyVersion("1.1.0.0")]
+[assembly: AssemblyFileVersion("1.1.0.0")]
 
 namespace ChangpogoLauncher {
   static class Program {
@@ -26,16 +26,17 @@ namespace ChangpogoLauncher {
   }
 
   sealed class LauncherForm : Form {
-    const string VersionText="1.0.0";
+    const string VersionText="1.1.0";
     const string DefaultGame=@"C:\Users\seo\Downloads\DGGL\Games\Changpogo_Win_260708\Changpogo.exe";
     readonly TextBox gamePath=new TextBox();
     readonly TextBox log=new TextBox();
-    readonly CheckBox lowLatency=new CheckBox { Text="저지연 실행 (권장)",AutoSize=true };
+    readonly CheckBox lowLatency=new CheckBox { Text="실행 우선순위 보조",AutoSize=true };
+    readonly CheckBox commandLatency=new CheckBox { Text="싱글 명령 지연 줄이기 (시험 적용)",AutoSize=true };
     readonly Button play=new Button();
     readonly Button update=new Button();
 
     public LauncherForm() {
-      Text="해상왕 장보고 런처";ClientSize=new Size(720,430);MinimumSize=new Size(740,470);
+      Text="해상왕 장보고 런처";ClientSize=new Size(720,470);MinimumSize=new Size(740,510);
       Font=new Font("맑은 고딕",10F);StartPosition=FormStartPosition.CenterScreen;
       var title=new Label { Text="해상왕 장보고",Font=new Font("맑은 고딕",22F,FontStyle.Bold),AutoSize=true,Location=new Point(22,18) };
       var version=new Label { Text="Launcher v"+VersionText,AutoSize=true,ForeColor=Color.SteelBlue,Location=new Point(250,39) };
@@ -44,11 +45,13 @@ namespace ChangpogoLauncher {
       gamePath.Text=LoadSetting("game-path.txt",DefaultGame);gamePath.Location=new Point(20,128);gamePath.Width=585;
       var browse=new Button { Text="찾기",Location=new Point(615,125),Size=new Size(80,31) };browse.Click+=Browse;
       lowLatency.Checked=LoadSetting("low-latency.txt","true")=="true";lowLatency.Location=new Point(20,177);
-      var lowHint=new Label { Text="1ms 타이머 · 높은 프로세스 우선순위 · 우선순위 부스트",AutoSize=true,ForeColor=Color.DimGray,Location=new Point(190,179) };
-      play.Text="게임 실행";play.Font=new Font(Font,FontStyle.Bold);play.Location=new Point(20,215);play.Size=new Size(180,44);
-      update.Text="런처 업데이트";update.Location=new Point(215,215);update.Size=new Size(180,44);
+      var lowHint=new Label { Text="기존 보조 설정 · 명령 지연 패치는 아래 옵션",AutoSize=true,ForeColor=Color.DimGray,Location=new Point(210,179) };
+      commandLatency.Checked=LoadSetting("command-latency.txt","true")=="true";commandLatency.Location=new Point(20,212);
+      Controls.Add(commandLatency);
+      play.Text="게임 실행";play.Font=new Font(Font,FontStyle.Bold);play.Location=new Point(20,255);play.Size=new Size(180,44);
+      update.Text="런처 업데이트";update.Location=new Point(215,255);update.Size=new Size(180,44);
       play.Click+=StartGame;update.Click+=async (s,e)=>await CheckUpdate();
-      log.Location=new Point(20,280);log.Size=new Size(675,125);log.Multiline=true;log.ReadOnly=true;log.ScrollBars=ScrollBars.Vertical;
+      log.Location=new Point(20,320);log.Size=new Size(675,125);log.Multiline=true;log.ReadOnly=true;log.ScrollBars=ScrollBars.Vertical;
       log.BackColor=Color.FromArgb(25,25,28);log.ForeColor=Color.Gainsboro;log.Font=new Font("Consolas",9F);
       Controls.AddRange(new Control[]{title,version,subtitle,pathLabel,gamePath,browse,lowLatency,lowHint,play,update,log});
       WriteLog("런처 v"+VersionText+" 준비됨. 원본 게임 파일은 변경하지 않습니다.");
@@ -61,19 +64,21 @@ namespace ChangpogoLauncher {
         if(dialog.ShowDialog(this)==DialogResult.OK) { gamePath.Text=dialog.FileName;SaveSetting("game-path.txt",dialog.FileName); }
     }
     async void StartGame(object sender,EventArgs e) {
-      play.Enabled=false;LowLatencySession session=null;Process process=null;
+      play.Enabled=false;update.Enabled=false;LowLatencySession session=null;Process process=null;
       try {
         var source=Path.GetFullPath(gamePath.Text.Trim());
         if(!File.Exists(source))throw new FileNotFoundException("Changpogo.exe를 찾을 수 없습니다.",source);
         if(!string.Equals(Path.GetFileName(source),"Changpogo.exe",StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("Changpogo.exe를 선택하세요.");
         SaveSetting("game-path.txt",source);SaveSetting("low-latency.txt",lowLatency.Checked?"true":"false");
-        process=Process.Start(new ProcessStartInfo { FileName=source,WorkingDirectory=Path.GetDirectoryName(source),UseShellExecute=true });
+        SaveSetting("command-latency.txt",commandLatency.Checked?"true":"false");
+        process=commandLatency.Checked?SinglePlayerPatch.Start(source):Process.Start(new ProcessStartInfo { FileName=source,WorkingDirectory=Path.GetDirectoryName(source),UseShellExecute=true });
         if(process==null)throw new InvalidOperationException("게임 프로세스를 시작하지 못했습니다.");
-        session=new LowLatencySession();if(lowLatency.Checked)session.Begin(process);
-        WriteLog("게임 시작 PID="+process.Id+" / 저지연 실행="+lowLatency.Checked);
+        session=new LowLatencySession();if(lowLatency.Checked)try { session.Begin(process); }catch(Exception ex) { WriteLog("실행 보조 설정 실패 (게임은 계속 실행): "+ex.Message); }
+        WriteLog("게임 시작 PID="+process.Id+" / 싱글 명령 패치="+commandLatency.Checked);
+        if(commandLatency.Checked)WriteLog("싱글 명령 묶음 200→50ms / 시뮬레이션 진행량 보정 / 멀티는 기존 경로");
         await Task.Run(()=>process.WaitForExit());WriteLog("게임 종료 / 코드 0x"+unchecked((uint)process.ExitCode).ToString("X8"));
       } catch(Exception ex) { WriteLog("실행 실패: "+ex.Message);MessageBox.Show(this,ex.Message,"게임 실행",MessageBoxButtons.OK,MessageBoxIcon.Error); }
-      finally { if(session!=null)session.Dispose();if(process!=null)process.Dispose();play.Enabled=true; }
+      finally { if(session!=null)session.Dispose();if(process!=null)process.Dispose();if(!IsDisposed){play.Enabled=true;update.Enabled=true;} }
     }
 
     async Task CheckUpdate() {

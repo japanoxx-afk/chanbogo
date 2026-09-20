@@ -4,4 +4,6 @@ runtime/
 *.log
 game-path.txt
 low-latency.txt
+command-latency.txt
+__pycache__/
 update.log
