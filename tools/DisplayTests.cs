@@ -9,6 +9,7 @@ class DisplayTests {
     var root=Path.Combine(Path.GetTempPath(),"Changpogo-display-tests-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
     foreach(var name in new[]{"Changpogo.ini","dgVoodoo.conf","DDraw.dll"})File.Copy(Path.Combine(args[1],name),Path.Combine(root,name));
     string original=File.ReadAllText(Path.Combine(root,"dgVoodoo.conf"));
+    string originalIni=File.ReadAllText(Path.Combine(root,"Changpogo.ini"));
     foreach(bool wide in new[]{false,true}) foreach(bool borderless in new[]{false,true,false}) {
       method.Invoke(null,new object[]{Path.Combine(root,"Changpogo.exe"),borderless,wide});
       string wrapper=File.ReadAllText(Path.Combine(root,"dgVoodoo.conf"));
@@ -29,7 +30,13 @@ class DisplayTests {
     foreach(string key in new[]{"FastVideoMemoryAccess","RTTexturesForceScaleAndMSAA"})
       if(!System.Text.RegularExpressions.Regex.IsMatch(safe,@"(?m)^"+key+@"\s*=\s*false\s*$"))throw new Exception("Compatibility flag not disabled: "+key);
     if(safe.Contains("h:1280, v:720"))throw new Exception("Compatibility retains forced resolution");
+    if(!System.Text.RegularExpressions.Regex.IsMatch(File.ReadAllText(Path.Combine(root,"Changpogo.ini")),@"(?m)^Depth\s*=\s*16\s*$"))throw new Exception("16-bit minimap fix missing");
+    string safeIni=File.ReadAllText(Path.Combine(root,"Changpogo.ini"));
+    compatible.Invoke(null,new object[]{Path.Combine(root,"Changpogo.exe"),true,true,true});
+    if(File.ReadAllText(Path.Combine(root,"Changpogo.ini"))!=safeIni)throw new Exception("16-bit mode not idempotent");
     compatible.Invoke(null,new object[]{Path.Combine(root,"Changpogo.exe"),true,true,false});
+    if(!System.Text.RegularExpressions.Regex.IsMatch(File.ReadAllText(Path.Combine(root,"Changpogo.ini")),@"(?m)^Depth\s*=\s*32\s*$"))throw new Exception("32-bit opt-out missing");
+    if(File.ReadAllText(Path.Combine(root,"Changpogo.ini.launcher-display.bak"))!=originalIni)throw new Exception("Game INI backup overwritten");
     if(!File.ReadAllText(Path.Combine(root,"dgVoodoo.conf")).Contains("h:1280, v:720"))throw new Exception("Profile not restored");
     Console.WriteLine("PASS display modes, compatibility on/off, backup preservation and idempotence. Fixture: "+root);
     return 0;

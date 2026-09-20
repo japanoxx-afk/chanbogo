@@ -12,8 +12,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Changpogo Launcher")]
-[assembly: AssemblyVersion("1.4.0.0")]
-[assembly: AssemblyFileVersion("1.4.0.0")]
+[assembly: AssemblyVersion("1.4.1.0")]
+[assembly: AssemblyFileVersion("1.4.1.0")]
 
 namespace ChangpogoLauncher {
   static class Program {
@@ -27,7 +27,7 @@ namespace ChangpogoLauncher {
   }
 
   sealed class LauncherForm : Form {
-    const string VersionText="1.4.0";
+    const string VersionText="1.4.1";
     const string DefaultGame=@"C:\Users\seo\Downloads\DGGL\Games\Changpogo_Win_260708\Changpogo.exe";
     readonly TextBox gamePath=new TextBox();
     readonly TextBox log=new TextBox();
@@ -40,7 +40,7 @@ namespace ChangpogoLauncher {
     readonly CheckBox widescreen=new CheckBox { Text="16:9 표시 (원본 화면 가로 확장)",AutoSize=true };
     MouseCapture mouseSession;
     GameDiagnostics diagnostics;
-    readonly CheckBox compatibility=new CheckBox { Text="미니맵 그래픽 호환 모드 (시험 · 강제 해상도 해제)",AutoSize=true };
+    readonly CheckBox compatibility=new CheckBox { Text="미니맵 호환 모드 (16비트 색상 · 권장)",AutoSize=true };
     readonly CheckBox diagnosticMode=new CheckBox { Text="충돌·멀티 진단 기록 (로컬 메모리 덤프 · 자동 전송 없음)",AutoSize=true };
 
     public LauncherForm() {
@@ -105,7 +105,7 @@ namespace ChangpogoLauncher {
         mouseSession=new MouseCapture(process,captureMouse.Checked,WriteLog);
         WriteLog("화면: "+display.Text+" / F8: 마우스 가두기 전환 / Alt+Tab: 자동 해제");
         WriteLog(widescreen.Checked?"16:9 가로 확장 표시 (네이티브 와이드 아님)":"4:3 원본 비율");
-        if(compatibility.Checked)WriteLog("그래픽 호환 모드: 원본 렌더 해상도 / 빠른 비디오 메모리·RT 강제 스케일 해제. 창모드에서는 원본 창 비율일 수 있습니다.");
+        if(compatibility.Checked)WriteLog("미니맵 호환 모드: 16비트 색상 / 원본 렌더 해상도 / 빠른 비디오 메모리·RT 강제 스케일 해제. 색상 계조가 줄어들 수 있습니다.");
         session=new LowLatencySession();if(lowLatency.Checked)try { session.Begin(process); }catch(Exception ex) { WriteLog("실행 보조 설정 실패 (게임은 계속 실행): "+ex.Message); }
         WriteLog("게임 시작 PID="+process.Id+" / 싱글 명령 패치="+commandLatency.Checked);
         if(commandLatency.Checked)WriteLog("싱글 명령 묶음 200→50ms / 시뮬레이션 진행량 보정 / 멀티는 기존 경로");

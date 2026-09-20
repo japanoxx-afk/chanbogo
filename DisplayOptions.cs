@@ -52,6 +52,9 @@ namespace ChangpogoLauncher {
       string video=Set(File.ReadAllText(ini,encoding),"VideoState","Fullscreen","1");
       video=Set(video,"VideoState","Width","1280");
       video=Set(video,"VideoState","Height","960");
+      // The black minimap reproduces with 32-bit surfaces. The user confirmed
+      // visibility after switching to 16-bit; keep this explicit on every launch.
+      video=Set(video,"VideoState","Depth",compatibility?"16":"32");
       Save(ini,video);
     }
   }
