@@ -8,6 +8,8 @@ command-latency.txt
 display-mode.txt
 widescreen.txt
 camera-distance.txt
+graphics-compatibility.txt
+diagnostics.txt
 capture-mouse.txt
 __pycache__/
 update.log

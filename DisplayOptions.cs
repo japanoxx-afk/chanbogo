@@ -24,6 +24,9 @@ namespace ChangpogoLauncher {
       finally { if(File.Exists(temp))File.Delete(temp); }
     }
     internal static void Prepare(string game,bool borderless,bool widescreen) {
+      PrepareCompatible(game,borderless,widescreen,false);
+    }
+    internal static void PrepareCompatible(string game,bool borderless,bool widescreen,bool compatibility) {
       string directory=Path.GetDirectoryName(game),ini=Path.Combine(directory,"Changpogo.ini"),wrapper=Path.Combine(directory,"dgVoodoo.conf");
       if(!File.Exists(ini)||!File.Exists(wrapper)||!File.Exists(Path.Combine(directory,"DDraw.dll")))
         throw new FileNotFoundException("화면 설정에 필요한 Changpogo.ini, dgVoodoo.conf, DDraw.dll을 게임 폴더에서 찾을 수 없습니다.");
@@ -36,6 +39,11 @@ namespace ChangpogoLauncher {
       config=Set(config,"General","ScalingMode",widescreen?"stretched":"stretched_ar");
       config=Set(config,"DirectX","AppControlledScreenMode","false");
       config=Set(config,"DirectX","Resolution",widescreen?"h:1280, v:720":"unforced");
+      // Conservative A/B profile; this is not a confirmed minimap fix.
+      // Set both branches explicitly so turning the option off restores the launcher profile.
+      config=Set(config,"DirectX","FastVideoMemoryAccess",compatibility?"false":"true");
+      config=Set(config,"DirectXExt","RTTexturesForceScaleAndMSAA",compatibility?"false":"true");
+      if(compatibility)config=Set(config,"DirectX","Resolution","unforced");
       config=Set(config,"GeneralExt","WindowedAttributes",borderless?"borderless, fullscreensize":"");
       config=Set(config,"GeneralExt","FullscreenAttributes","fake");
       Save(wrapper,config);
@@ -63,7 +71,7 @@ namespace ChangpogoLauncher {
     readonly Timer timer=new Timer { Interval=30 };
     readonly Process game;
     readonly Action<string> log;
-    bool clipped,enabled,lastF8,disposed;
+    bool clipped,enabled,lastF8,lastF9,disposed;
     public static void InitializeDpi() { SetProcessDPIAware(); }
     public MouseCapture(Process process,bool capture,Action<string> logger) {
       game=process;enabled=capture;log=logger;timer.Tick+=(s,e)=>Tick();timer.Start();
@@ -78,6 +86,9 @@ namespace ChangpogoLauncher {
         bool f8=(GetAsyncKeyState(0x77)&0x8000)!=0;
         if(active&&f8&&!lastF8) { enabled=!enabled;log("마우스 가두기 "+(enabled?"켜짐":"해제됨")+" (F8)"); }
         lastF8=f8;
+        bool f9=(GetAsyncKeyState(0x78)&0x8000)!=0;
+        if(active&&f9&&!lastF9)log("USER_MARK F9: 미니맵/명령 지연 등 문제 발생 시점");
+        lastF9=f9;
         if(!active||!enabled) { Release();return; }
         Rect client;if(!GetClientRect(window,out client)||client.right<=0||client.bottom<=0) { Release();return; }
         Point first=new Point(),last=new Point { x=client.right,y=client.bottom };

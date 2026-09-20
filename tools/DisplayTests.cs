@@ -23,7 +23,15 @@ class DisplayTests {
       string before=wrapper;method.Invoke(null,new object[]{Path.Combine(root,"Changpogo.exe"),borderless,wide});
       if(File.ReadAllText(Path.Combine(root,"dgVoodoo.conf"))!=before)throw new Exception("Not idempotent");
     }
-    Console.WriteLine("PASS window/borderless/window configuration, fake fullscreen, backup preservation, idempotence. Fixture: "+root);
+    var compatible=type.GetMethod("PrepareCompatible",BindingFlags.NonPublic|BindingFlags.Static);
+    compatible.Invoke(null,new object[]{Path.Combine(root,"Changpogo.exe"),true,true,true});
+    string safe=File.ReadAllText(Path.Combine(root,"dgVoodoo.conf"));
+    foreach(string key in new[]{"FastVideoMemoryAccess","RTTexturesForceScaleAndMSAA"})
+      if(!System.Text.RegularExpressions.Regex.IsMatch(safe,@"(?m)^"+key+@"\s*=\s*false\s*$"))throw new Exception("Compatibility flag not disabled: "+key);
+    if(safe.Contains("h:1280, v:720"))throw new Exception("Compatibility retains forced resolution");
+    compatible.Invoke(null,new object[]{Path.Combine(root,"Changpogo.exe"),true,true,false});
+    if(!File.ReadAllText(Path.Combine(root,"dgVoodoo.conf")).Contains("h:1280, v:720"))throw new Exception("Profile not restored");
+    Console.WriteLine("PASS display modes, compatibility on/off, backup preservation and idempotence. Fixture: "+root);
     return 0;
   }
 }

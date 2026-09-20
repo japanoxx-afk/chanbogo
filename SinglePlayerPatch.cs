@@ -34,6 +34,9 @@ namespace ChangpogoLauncher {
       var data=new byte[value.Length/2];for(int i=0;i<data.Length;i++)data[i]=Convert.ToByte(value.Substring(i*2,2),16);return data;
     }
     internal static Process Start(string path) {
+      return StartObserved(path,true,null);
+    }
+    internal static Process StartObserved(string path,bool latency,Action<Process> observe) {
       string hash,hex,relocations;
       using(var reader=new StreamReader(Assembly.GetExecutingAssembly().GetManifestResourceStream("latency.manifest"))) {
         hash=reader.ReadLine();hex=reader.ReadLine();relocations=reader.ReadLine();
@@ -41,13 +44,14 @@ namespace ChangpogoLauncher {
       // Keep the source locked against writes/replacement through process creation.
       using(var source=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read)) {
         using(var sha=SHA256.Create())
-          if(!string.Equals(BitConverter.ToString(sha.ComputeHash(source)).Replace("-",""),hash,StringComparison.OrdinalIgnoreCase))
+          if(latency&&!string.Equals(BitConverter.ToString(sha.ComputeHash(source)).Replace("-",""),hash,StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("이 게임 버전은 명령 지연 패치 지원 대상이 아닙니다. 명령 지연 옵션을 끄면 원본으로 실행할 수 있습니다.");
         var si=new StartupInfo();si.cb=Marshal.SizeOf(typeof(StartupInfo));ProcessInfo pi;
         Require(CreateProcess(path,new StringBuilder(LauncherForm.Quote(path)),IntPtr.Zero,IntPtr.Zero,false,4,IntPtr.Zero,Path.GetDirectoryName(path),ref si,out pi));
         bool resumed=false;Process managed=null;
         try {
           UIntPtr count;
+          if(latency) {
           var original=new byte[6];
           Require(ReadProcessMemory(pi.process,new IntPtr(0x488bb3),original,(UIntPtr)6,out count));
           if(count.ToUInt64()!=6 || BitConverter.ToString(original)!="55-8B-EC-83-EC-40")throw new InvalidDataException("실행 중 게임 명령어 검증 실패");
@@ -64,7 +68,11 @@ namespace ChangpogoLauncher {
           Require(WriteProcessMemory(pi.process,entry,hook,(UIntPtr)6,out count));Require(count.ToUInt64()==6);
           uint unused;Require(VirtualProtectEx(pi.process,entry,(UIntPtr)6,old,out unused));
           Require(FlushInstructionCache(pi.process,IntPtr.Zero,UIntPtr.Zero));
+          }
           managed=Process.GetProcessById((int)pi.pid);
+          // Retain a process handle before it can exit, so ExitCode stays available.
+          var retainedHandle=managed.Handle;
+          if(observe!=null)observe(managed);
           Require(ResumeThread(pi.thread)!=uint.MaxValue);resumed=true;return managed;
         } finally {
           if(!resumed) { TerminateProcess(pi.process,1);if(managed!=null)managed.Dispose(); }
