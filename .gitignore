@@ -6,6 +6,8 @@ game-path.txt
 low-latency.txt
 command-latency.txt
 display-mode.txt
+widescreen.txt
+camera-distance.txt
 capture-mouse.txt
 __pycache__/
 update.log

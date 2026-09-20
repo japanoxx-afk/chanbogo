@@ -23,7 +23,7 @@ namespace ChangpogoLauncher {
       try { File.WriteAllText(temp,text,Encoding.GetEncoding(28591));File.Replace(temp,file,null); }
       finally { if(File.Exists(temp))File.Delete(temp); }
     }
-    internal static void Prepare(string game,bool borderless) {
+    internal static void Prepare(string game,bool borderless,bool widescreen) {
       string directory=Path.GetDirectoryName(game),ini=Path.Combine(directory,"Changpogo.ini"),wrapper=Path.Combine(directory,"dgVoodoo.conf");
       if(!File.Exists(ini)||!File.Exists(wrapper)||!File.Exists(Path.Combine(directory,"DDraw.dll")))
         throw new FileNotFoundException("화면 설정에 필요한 Changpogo.ini, dgVoodoo.conf, DDraw.dll을 게임 폴더에서 찾을 수 없습니다.");
@@ -33,10 +33,18 @@ namespace ChangpogoLauncher {
       // Launcher owns clipping so it can release immediately on focus loss/F8.
       config=Set(config,"General","CaptureMouse","false");
       config=Set(config,"General","CenterAppWindow","true");
+      config=Set(config,"General","ScalingMode",widescreen?"stretched":"stretched_ar");
+      config=Set(config,"DirectX","AppControlledScreenMode","false");
+      config=Set(config,"DirectX","Resolution",widescreen?"h:1280, v:720":"unforced");
       config=Set(config,"GeneralExt","WindowedAttributes",borderless?"borderless, fullscreensize":"");
       config=Set(config,"GeneralExt","FullscreenAttributes","fake");
       Save(wrapper,config);
-      Save(ini,Set(File.ReadAllText(ini,encoding),"VideoState","Fullscreen","0"));
+      // dgVoodoo's forced window mode requires a fullscreen DirectDraw surface.
+      // A native windowed primary surface plus fullscreensize produces overlapping blits.
+      string video=Set(File.ReadAllText(ini,encoding),"VideoState","Fullscreen","1");
+      video=Set(video,"VideoState","Width","1280");
+      video=Set(video,"VideoState","Height","960");
+      Save(ini,video);
     }
   }
 

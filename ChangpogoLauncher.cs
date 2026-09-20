@@ -12,8 +12,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Changpogo Launcher")]
-[assembly: AssemblyVersion("1.2.0.0")]
-[assembly: AssemblyFileVersion("1.2.0.0")]
+[assembly: AssemblyVersion("1.3.0.0")]
+[assembly: AssemblyFileVersion("1.3.0.0")]
 
 namespace ChangpogoLauncher {
   static class Program {
@@ -27,7 +27,7 @@ namespace ChangpogoLauncher {
   }
 
   sealed class LauncherForm : Form {
-    const string VersionText="1.2.0";
+    const string VersionText="1.3.0";
     const string DefaultGame=@"C:\Users\seo\Downloads\DGGL\Games\Changpogo_Win_260708\Changpogo.exe";
     readonly TextBox gamePath=new TextBox();
     readonly TextBox log=new TextBox();
@@ -37,10 +37,12 @@ namespace ChangpogoLauncher {
     readonly Button update=new Button();
     readonly ComboBox display=new ComboBox { DropDownStyle=ComboBoxStyle.DropDownList };
     readonly CheckBox captureMouse=new CheckBox { Text="마우스 가두기 (F8: 해제/다시 가두기)",AutoSize=true };
+    readonly CheckBox widescreen=new CheckBox { Text="16:9 표시 (원본 화면 가로 확장)",AutoSize=true };
+    readonly ComboBox cameraDistance=new ComboBox { DropDownStyle=ComboBoxStyle.DropDownList };
     MouseCapture mouseSession;
 
     public LauncherForm() {
-      Text="해상왕 장보고 런처";ClientSize=new Size(720,525);MinimumSize=new Size(740,565);
+      Text="해상왕 장보고 런처";ClientSize=new Size(720,600);MinimumSize=new Size(740,640);
       Font=new Font("맑은 고딕",10F);StartPosition=FormStartPosition.CenterScreen;
       var title=new Label { Text="해상왕 장보고",Font=new Font("맑은 고딕",22F,FontStyle.Bold),AutoSize=true,Location=new Point(22,18) };
       var version=new Label { Text="Launcher v"+VersionText,AutoSize=true,ForeColor=Color.SteelBlue,Location=new Point(250,39) };
@@ -56,11 +58,16 @@ namespace ChangpogoLauncher {
       display.SelectedIndex=LoadSetting("display-mode.txt","0")=="1"?1:0;display.Location=new Point(20,247);display.Width=250;
       captureMouse.Checked=LoadSetting("capture-mouse.txt","true")=="true";captureMouse.Location=new Point(290,250);
       Controls.AddRange(new Control[]{display,captureMouse});
+      widescreen.Checked=LoadSetting("widescreen.txt","true")=="true";widescreen.Location=new Point(20,280);Controls.Add(widescreen);
+      cameraDistance.Items.AddRange(new object[]{"카메라: 기본","카메라: 1.25배 멀리 (시험)","카메라: 1.5배 멀리 (시험)"});
+      int distance;if(!int.TryParse(LoadSetting("camera-distance.txt","0"),out distance)||distance<0||distance>2)distance=0;
+      cameraDistance.SelectedIndex=distance;cameraDistance.Location=new Point(20,315);cameraDistance.Width=300;Controls.Add(cameraDistance);
+      Controls.Add(new Label { Text="카메라는 싱글 테스트용 · 화면 깨짐 시 기본으로 복귀",AutoSize=true,Location=new Point(20,350),ForeColor=Color.DimGray });
       FormClosed+=(s,e)=>{if(mouseSession!=null)mouseSession.Dispose();};
-      play.Text="게임 실행";play.Font=new Font(Font,FontStyle.Bold);play.Location=new Point(20,305);play.Size=new Size(180,44);
-      update.Text="런처 업데이트";update.Location=new Point(215,305);update.Size=new Size(180,44);
+      play.Text="게임 실행";play.Font=new Font(Font,FontStyle.Bold);play.Location=new Point(20,390);play.Size=new Size(180,44);
+      update.Text="런처 업데이트";update.Location=new Point(215,390);update.Size=new Size(180,44);
       play.Click+=StartGame;update.Click+=async (s,e)=>await CheckUpdate();
-      log.Location=new Point(20,375);log.Size=new Size(675,125);log.Multiline=true;log.ReadOnly=true;log.ScrollBars=ScrollBars.Vertical;
+      log.Location=new Point(20,455);log.Size=new Size(675,125);log.Multiline=true;log.ReadOnly=true;log.ScrollBars=ScrollBars.Vertical;
       log.BackColor=Color.FromArgb(25,25,28);log.ForeColor=Color.Gainsboro;log.Font=new Font("Consolas",9F);
       Controls.AddRange(new Control[]{title,version,subtitle,pathLabel,gamePath,browse,lowLatency,lowHint,play,update,log});
       WriteLog("런처 v"+VersionText+" 준비됨. 원본 게임 파일은 변경하지 않습니다.");
@@ -81,12 +88,15 @@ namespace ChangpogoLauncher {
         SaveSetting("game-path.txt",source);SaveSetting("low-latency.txt",lowLatency.Checked?"true":"false");
         SaveSetting("command-latency.txt",commandLatency.Checked?"true":"false");
         if(Process.GetProcessesByName("Changpogo").Length>0)throw new InvalidOperationException("실행 중인 게임을 종료한 뒤 화면 설정을 적용하세요.");
-        DisplayOptions.Prepare(source,display.SelectedIndex==1);
+        DisplayOptions.Prepare(source,display.SelectedIndex==1,widescreen.Checked);
+        SaveSetting("widescreen.txt",widescreen.Checked?"true":"false");
         SaveSetting("display-mode.txt",display.SelectedIndex.ToString());SaveSetting("capture-mouse.txt",captureMouse.Checked?"true":"false");
-        process=commandLatency.Checked?SinglePlayerPatch.Start(source):Process.Start(new ProcessStartInfo { FileName=source,WorkingDirectory=Path.GetDirectoryName(source),UseShellExecute=true });
+        SaveSetting("camera-distance.txt",cameraDistance.SelectedIndex.ToString());
+        process=commandLatency.Checked||cameraDistance.SelectedIndex!=0?SinglePlayerPatch.StartConfigured(source,commandLatency.Checked,cameraDistance.SelectedIndex):Process.Start(new ProcessStartInfo { FileName=source,WorkingDirectory=Path.GetDirectoryName(source),UseShellExecute=true });
         if(process==null)throw new InvalidOperationException("게임 프로세스를 시작하지 못했습니다.");
         mouseSession=new MouseCapture(process,captureMouse.Checked,WriteLog);
         WriteLog("화면: "+display.Text+" / F8: 마우스 가두기 전환 / Alt+Tab: 자동 해제");
+        WriteLog((widescreen.Checked?"16:9 가로 확장 표시 (네이티브 와이드 아님)":"4:3 원본 비율")+" / "+cameraDistance.Text);
         session=new LowLatencySession();if(lowLatency.Checked)try { session.Begin(process); }catch(Exception ex) { WriteLog("실행 보조 설정 실패 (게임은 계속 실행): "+ex.Message); }
         WriteLog("게임 시작 PID="+process.Id+" / 싱글 명령 패치="+commandLatency.Checked);
         if(commandLatency.Checked)WriteLog("싱글 명령 묶음 200→50ms / 시뮬레이션 진행량 보정 / 멀티는 기존 경로");
