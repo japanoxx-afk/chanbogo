@@ -41,7 +41,9 @@ namespace ChangpogoLauncher {
     }
     internal static Process StartObserved(string path,bool latency,bool multiplayer,Action<Process> observe) {
       string hash,hex,relocations;
-#if MULTIPLAYER_EXPERIMENT
+#if MULTIPLAYER_75MS
+      const string resourceName="multiplayer-75ms.manifest";
+#elif MULTIPLAYER_EXPERIMENT
       const string resourceName="multiplayer-experiment.manifest";
 #else
       const string resourceName="latency.manifest";

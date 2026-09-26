@@ -12,7 +12,8 @@ from capstone import Cs, CS_ARCH_X86, CS_MODE_32
 HASH = '16e4c3d3d17438928839a09901a4159da154eb0ec822c784856707b77f9f4b1f'
 START, END, BASE = 0x488bb3, 0x48904d, 0x10000000
 
-def generate(path, multiplayer=False):
+def generate(path, multiplayer=False, multiplayer_period=100):
+    assert multiplayer_period in (75,100)
     raw = open(path, 'rb').read()
     assert hashlib.sha256(raw).hexdigest() == HASH, 'Unsupported executable'
     pe = pefile.PE(data=raw)
@@ -21,7 +22,7 @@ def generate(path, multiplayer=False):
     assert instructions[-1].address + instructions[-1].size == END
     # The existing float constant is read-only and covered by the whole-file hash.
     section = pe.sections[1]
-    period = 100 if multiplayer else 50
+    period = multiplayer_period if multiplayer else 50
     const_offset = section.get_data().find(struct.pack('<f', float(period)))
     assert const_offset >= 0
     fifty = 0x400000 + section.VirtualAddress + const_offset
@@ -43,6 +44,11 @@ def generate(path, multiplayer=False):
         assert half_offset >= 0
         half = 0x400000 + section.VirtualAddress + half_offset
         changes[0x488f14] = ('d88680000000', b'\xd8\x0d'+struct.pack('<I',half)+bytes.fromhex('d88680000000'))
+        if period == 75:
+            offset = section.get_data().find(struct.pack('<f',0.75))
+            assert offset >= 0
+            scale = b'\xd8\x0d'+struct.pack('<I',half)+b'\xd8\x0d'+struct.pack('<I',0x400000+section.VirtualAddress+offset)
+            changes[0x488f14] = ('d88680000000',scale+bytes.fromhex('d88680000000'))
     # Single-player has no remote clock to chase. Anchor each successful batch
     # to now instead of the multiplayer drift controller. It otherwise couples
     # short batches to a controller tuned for 200ms.
@@ -90,9 +96,9 @@ def generate(path, multiplayer=False):
             result.extend(i.bytes)
     return bytes(result), relocs, mapping
 
-def combined_candidate(path):
+def combined_candidate(path, multiplayer_period=100):
     single, sr, _ = generate(path)
-    multi, mr, _ = generate(path, multiplayer=True)
+    multi, mr, _ = generate(path, multiplayer=True, multiplayer_period=multiplayer_period)
     offset = len(single)
     result = bytearray(single)
     # The single stub restores flags at byte 16 before its original fallback.
@@ -107,7 +113,7 @@ def combined_candidate(path):
     return bytes(result), [r for r in sr if r != 24] + [offset+r for r in mr], {}
 
 if __name__ == '__main__':
-    code, relocs, _ = combined_candidate(sys.argv[1]) if '--multiplayer-experiment' in sys.argv else generate(sys.argv[1])
+    code, relocs, _ = combined_candidate(sys.argv[1],75 if '--75ms' in sys.argv else 100) if '--multiplayer-experiment' in sys.argv else generate(sys.argv[1])
     print(HASH)
     print(code.hex())
     print(','.join(str(r) for r in relocs))

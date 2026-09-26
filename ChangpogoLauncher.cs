@@ -12,7 +12,10 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Changpogo Launcher")]
-#if MULTIPLAYER_EXPERIMENT
+#if MULTIPLAYER_75MS
+[assembly: AssemblyVersion("1.5.1.0")]
+[assembly: AssemblyFileVersion("1.5.1.0")]
+#elif MULTIPLAYER_EXPERIMENT
 [assembly: AssemblyVersion("1.5.0.0")]
 [assembly: AssemblyFileVersion("1.5.0.0")]
 #else
@@ -32,8 +35,12 @@ namespace ChangpogoLauncher {
   }
 
   sealed class LauncherForm : Form {
-#if MULTIPLAYER_EXPERIMENT
+#if MULTIPLAYER_75MS
+    const string VersionText="1.5.1";
+    const string ExperimentPeriod="75";
+#elif MULTIPLAYER_EXPERIMENT
     const string VersionText="1.5.0";
+    const string ExperimentPeriod="100";
 #else
     const string VersionText="1.4.6";
 #endif
@@ -78,9 +85,9 @@ namespace ChangpogoLauncher {
       Controls.AddRange(new Control[]{compatibility,diagnosticMode});
       multiplayerLatency.Checked=false;multiplayerLatency.Enabled=false;multiplayerLatency.Location=new Point(20,380);Controls.Add(multiplayerLatency);
 #if MULTIPLAYER_EXPERIMENT
-      Text+=" [멀티 100ms 시험판]";
+      Text+=" [멀티 "+ExperimentPeriod+"ms 시험판]";
       commandLatency.Checked=true;commandLatency.Enabled=false;
-      multiplayerLatency.Text="멀티 100ms 시험판 · 대기 3 유지 · 전원 이 시험판 사용 필수";
+      multiplayerLatency.Text="멀티 "+ExperimentPeriod+"ms 시험판 · 대기 3 유지 · 전원 이 시험판 사용 필수";
 #endif
       Controls.Add(new Label { Text="문제 발생 시 F9: 시점 기록 · 종료 후 진단 폴더 확인",AutoSize=true,Location=new Point(20,415),ForeColor=Color.DimGray });
       var multiplayerTest=new Button { Text="멀티 응답 테스트",Location=new Point(490,408),Size=new Size(205,35) };
@@ -113,7 +120,7 @@ namespace ChangpogoLauncher {
         SaveSetting("command-latency.txt",commandLatency.Checked?"true":"false");
         if(Process.GetProcessesByName("Changpogo").Length>0)throw new InvalidOperationException("실행 중인 게임을 종료한 뒤 화면 설정을 적용하세요.");
 #if MULTIPLAYER_EXPERIMENT
-        if(MessageBox.Show(this,"멀티 처리 주기 200→100ms 시험판입니다. 실제 두 PC 동기화·안정성은 검증 전입니다.\n참가자 전원이 이 1.5.0 시험판으로 게임을 새로 실행해야 합니다. 일반 버전과 혼용하지 마세요.\n동기화 오류·끊김 발생 시 경기를 종료하고 전원이 1.4.6으로 돌아가세요.\n계속할까요?","100ms 시험판",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
+        if(MessageBox.Show(this,"멀티 처리 주기 "+ExperimentPeriod+"ms 시험판입니다. 실제 두 PC 동기화·안정성은 검증 전입니다.\n참가자 전원이 이 "+VersionText+" 시험판으로 게임을 새로 실행해야 합니다. 다른 버전과 혼용하지 마세요.\n동기화 오류·끊김 발생 시 경기를 종료하고 전원이 이전 버전으로 돌아가세요.\n계속할까요?",ExperimentPeriod+"ms 시험판",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
 #endif
         if(multiplayerLatency.Checked&&MessageBox.Show(this,"참가자 전원이 v1.4.4 이상에서 같은 멀티 대기 옵션을 켜고 게임을 재시작해야 합니다.\n\n통신 대기 여유가 줄어 끊김이 늘 수 있는 시험 기능입니다. 문제가 생기면 전원이 옵션을 끄고 재시작하세요.\n계속할까요?","멀티 명령 대기 시험",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
         SaveSetting("multiplayer-latency.txt",multiplayerLatency.Checked?"true":"false");
@@ -137,7 +144,7 @@ namespace ChangpogoLauncher {
         if(commandLatency.Checked)WriteLog("싱글 명령 묶음 200→50ms / 시뮬레이션 진행량 보정 / 멀티는 기존 경로");
         WriteLog(multiplayerLatency.Checked?"멀티 초기 선행 명령 묶음 3→2 적용 / 200ms 처리 간격 유지 / 실제 체감 개선은 양쪽 테스트 필요":"멀티 명령 대기: 원본 3 유지");
 #if MULTIPLAYER_EXPERIMENT
-        WriteLog("시험 패치: 멀티 처리 100ms / 진행량 0.5배 보정 / 원본 준비 검사·동기화 보정 유지 / 싱글 50ms 유지");
+        WriteLog("시험 패치: 멀티 처리 "+ExperimentPeriod+"ms / 진행량 주기 비례 보정 / 원본 준비 검사·동기화 보정 유지 / 싱글 50ms 유지");
 #endif
         await Task.Run(()=>process.WaitForExit());WriteLog("게임 종료 / 코드 0x"+unchecked((uint)process.ExitCode).ToString("X8"));
       } catch(Exception ex) { WriteLog("실행 실패: "+ex.Message);MessageBox.Show(this,ex.Message,"게임 실행",MessageBoxButtons.OK,MessageBoxIcon.Error); }
