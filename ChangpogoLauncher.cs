@@ -12,8 +12,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Changpogo Launcher")]
-[assembly: AssemblyVersion("1.4.4.0")]
-[assembly: AssemblyFileVersion("1.4.4.0")]
+[assembly: AssemblyVersion("1.4.5.0")]
+[assembly: AssemblyFileVersion("1.4.5.0")]
 
 namespace ChangpogoLauncher {
   static class Program {
@@ -27,7 +27,7 @@ namespace ChangpogoLauncher {
   }
 
   sealed class LauncherForm : Form {
-    const string VersionText="1.4.4";
+    const string VersionText="1.4.5";
     const string DefaultGame=@"C:\Users\seo\Downloads\DGGL\Games\Changpogo_Win_260708\Changpogo.exe";
     readonly TextBox gamePath=new TextBox();
     readonly TextBox log=new TextBox();
@@ -69,6 +69,8 @@ namespace ChangpogoLauncher {
       Controls.AddRange(new Control[]{compatibility,diagnosticMode});
       multiplayerLatency.Checked=LoadSetting("multiplayer-latency.txt","false")=="true";multiplayerLatency.Location=new Point(20,380);Controls.Add(multiplayerLatency);
       Controls.Add(new Label { Text="문제 발생 시 F9: 시점 기록 · 종료 후 진단 폴더 확인",AutoSize=true,Location=new Point(20,415),ForeColor=Color.DimGray });
+      var multiplayerTest=new Button { Text="멀티 응답 테스트",Location=new Point(490,408),Size=new Size(205,35) };
+      multiplayerTest.Click+=(s,e)=>{using(var dialog=new MultiplayerCaptureForm())dialog.ShowDialog(this);};Controls.Add(multiplayerTest);
       FormClosed+=(s,e)=>{if(mouseSession!=null)mouseSession.Dispose();if(diagnostics!=null)diagnostics.Dispose();};
       play.Text="게임 실행";play.Font=new Font(Font,FontStyle.Bold);play.Location=new Point(20,460);play.Size=new Size(180,44);
       update.Text="런처 업데이트";update.Location=new Point(215,460);update.Size=new Size(180,44);
