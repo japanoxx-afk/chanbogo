@@ -3,6 +3,7 @@ dist/
 runtime/
 *.log
 game-path.txt
+game-clock.txt
 low-latency.txt
 command-latency.txt
 multiplayer-latency.txt

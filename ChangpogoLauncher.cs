@@ -13,8 +13,8 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Changpogo Launcher")]
 #if MULTIPLAYER_75MS
-[assembly: AssemblyVersion("1.5.1.0")]
-[assembly: AssemblyFileVersion("1.5.1.0")]
+[assembly: AssemblyVersion("1.5.2.0")]
+[assembly: AssemblyFileVersion("1.5.2.0")]
 #elif MULTIPLAYER_EXPERIMENT
 [assembly: AssemblyVersion("1.5.0.0")]
 [assembly: AssemblyFileVersion("1.5.0.0")]
@@ -36,7 +36,7 @@ namespace ChangpogoLauncher {
 
   sealed class LauncherForm : Form {
 #if MULTIPLAYER_75MS
-    const string VersionText="1.5.1";
+    const string VersionText="1.5.2";
     const string ExperimentPeriod="75";
 #elif MULTIPLAYER_EXPERIMENT
     const string VersionText="1.5.0";
@@ -57,6 +57,8 @@ namespace ChangpogoLauncher {
     readonly CheckBox widescreen=new CheckBox { Text="16:9 표시 (원본 화면 가로 확장)",AutoSize=true };
     MouseCapture mouseSession;
     GameDiagnostics diagnostics;
+    GameClockOverlay gameClock;
+    readonly CheckBox showGameClock=new CheckBox {Text="게임 시간 표시",AutoSize=true};
     readonly CheckBox compatibility=new CheckBox { Text="미니맵 정상 설정 복원·유지 (화면 강제 설정 안 함)",AutoSize=true };
     readonly CheckBox diagnosticMode=new CheckBox { Text="충돌·멀티 진단 기록 (로컬 메모리 덤프 · 자동 전송 없음)",AutoSize=true };
 
@@ -73,6 +75,8 @@ namespace ChangpogoLauncher {
       var lowHint=new Label { Text="기존 보조 설정 · 명령 지연 패치는 아래 옵션",AutoSize=true,ForeColor=Color.DimGray,Location=new Point(210,179) };
       commandLatency.Checked=LoadSetting("command-latency.txt","true")=="true";commandLatency.Location=new Point(20,212);
       Controls.Add(commandLatency);
+      showGameClock.Checked=LoadSetting("game-clock.txt","true")=="true";showGameClock.Location=new Point(420,212);Controls.Add(showGameClock);
+      showGameClock.CheckedChanged+=(s,e)=>{SaveSetting("game-clock.txt",showGameClock.Checked?"true":"false");if(!showGameClock.Checked&&gameClock!=null){gameClock.Dispose();gameClock=null;}};
       display.Items.AddRange(new object[]{"창모드","테두리 없는 전체화면"});
       display.SelectedIndex=LoadSetting("display-mode.txt","0")=="1"?1:0;display.Location=new Point(20,247);display.Width=250;
       captureMouse.Checked=LoadSetting("capture-mouse.txt","true")=="true";captureMouse.Location=new Point(290,250);
@@ -92,7 +96,7 @@ namespace ChangpogoLauncher {
       Controls.Add(new Label { Text="문제 발생 시 F9: 시점 기록 · 종료 후 진단 폴더 확인",AutoSize=true,Location=new Point(20,415),ForeColor=Color.DimGray });
       var multiplayerTest=new Button { Text="멀티 응답 테스트",Location=new Point(490,408),Size=new Size(205,35) };
       multiplayerTest.Click+=(s,e)=>{using(var dialog=new MultiplayerCaptureForm())dialog.ShowDialog(this);};Controls.Add(multiplayerTest);
-      FormClosed+=(s,e)=>{if(mouseSession!=null)mouseSession.Dispose();if(diagnostics!=null)diagnostics.Dispose();};
+      FormClosed+=(s,e)=>{if(gameClock!=null)gameClock.Dispose();if(mouseSession!=null)mouseSession.Dispose();if(diagnostics!=null)diagnostics.Dispose();};
       play.Text="게임 실행";play.Font=new Font(Font,FontStyle.Bold);play.Location=new Point(20,460);play.Size=new Size(180,44);
       update.Text="런처 업데이트";update.Location=new Point(215,460);update.Size=new Size(180,44);
       var reports=new Button { Text="진단 폴더 열기",Location=new Point(410,460),Size=new Size(180,44) };
@@ -135,6 +139,7 @@ namespace ChangpogoLauncher {
         process=SinglePlayerPatch.StartObserved(source,commandLatency.Checked,false,diagnostics==null?(Action<Process>)null:diagnostics.Attach);
         if(process==null)throw new InvalidOperationException("게임 프로세스를 시작하지 못했습니다.");
         mouseSession=new MouseCapture(process,captureMouse.Checked,WriteLog);
+        if(showGameClock.Checked&&commandLatency.Checked)try {gameClock=new GameClockOverlay(process);}catch(Exception ex){WriteLog("게임 시간 표시 실패 (게임은 계속 실행): "+ex.Message);}
         WriteLog("화면: "+(compatibility.Checked?"원본 설정 유지":display.Text)+" / F8: 마우스 가두기 전환 / Alt+Tab: 자동 해제");
         if(!compatibility.Checked)WriteLog(widescreen.Checked?"16:9 가로 확장 표시 (네이티브 와이드 아님)":"4:3 원본 비율");
         if(compatibility.Checked)WriteLog("최초 화면 설정 백업이 있으면 복원, 없으면 현재 설정 유지. 전체화면·16:9·해상도·색상 강제 변경 없음.");
@@ -148,7 +153,7 @@ namespace ChangpogoLauncher {
 #endif
         await Task.Run(()=>process.WaitForExit());WriteLog("게임 종료 / 코드 0x"+unchecked((uint)process.ExitCode).ToString("X8"));
       } catch(Exception ex) { WriteLog("실행 실패: "+ex.Message);MessageBox.Show(this,ex.Message,"게임 실행",MessageBoxButtons.OK,MessageBoxIcon.Error); }
-      finally { if(mouseSession!=null){mouseSession.Dispose();mouseSession=null;}if(diagnostics!=null){diagnostics.Dispose();diagnostics=null;}if(session!=null)session.Dispose();if(process!=null)process.Dispose();if(!IsDisposed){play.Enabled=true;update.Enabled=true;} }
+      finally { if(gameClock!=null){gameClock.Dispose();gameClock=null;}if(mouseSession!=null){mouseSession.Dispose();mouseSession=null;}if(diagnostics!=null){diagnostics.Dispose();diagnostics=null;}if(session!=null)session.Dispose();if(process!=null)process.Dispose();if(!IsDisposed){play.Enabled=true;update.Enabled=true;} }
     }
 
     async Task CheckUpdate() {
@@ -178,15 +183,7 @@ namespace ChangpogoLauncher {
     }
     sealed class UpdateInfo { public string Version;public string Url; }
     static async Task<UpdateInfo> FindUpdate(HttpClient http) {
-      const string releases="https://api.github.com/repos/japanoxx-afk/chanbogo/releases/latest";
-      using(var response=await http.GetAsync(releases)) {
-        if(response.IsSuccessStatusCode) {
-          var json=await response.Content.ReadAsStringAsync();
-          var tag=Regex.Match(json,"\\\"tag_name\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
-          var asset=Regex.Match(json,"\\\"browser_download_url\\\"\\s*:\\s*\\\"([^\\\"]*ChangpogoLauncher[^\\\"]*\\.zip)\\\"",RegexOptions.IgnoreCase);
-          if(tag.Success&&asset.Success)return new UpdateInfo { Version=tag.Groups[1].Value,Url=asset.Groups[1].Value.Replace("\\/","/") };
-        } else if((int)response.StatusCode!=404)throw new HttpRequestException("GitHub API 응답: "+(int)response.StatusCode);
-      }
+      // The manifest explicitly selects the update, including experimental builds.
       const string manifest="https://raw.githubusercontent.com/japanoxx-afk/chanbogo/main/update.json";
       var fallback=await http.GetStringAsync(manifest);
       var version=Regex.Match(fallback,"\\\"version\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
