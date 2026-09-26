@@ -42,14 +42,18 @@ namespace ChangpogoLauncher {
             process.StartInfo=new ProcessStartInfo { FileName=helper,Arguments=selected+" "+session+" 60",UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true };
             process.Start();
             var errors=process.StandardError.ReadToEndAsync();
-            string saved=null,line;
+            string saved=null,line;bool interrupted=false;
             while((line=await process.StandardOutput.ReadLineAsync())!=null) {
               if(line.StartsWith("Recording for "))status.Text="기록 중 (60초) · 게임으로 돌아가 약 3초마다 우클릭 이동 명령을 내려주세요.";
               else if(line.StartsWith("Saved "))saved=line.Substring(6);
+              else if(line.StartsWith("Interrupted ")){saved=line.Substring(12);interrupted=true;}
+              else if(line.StartsWith("Capture failed at verify_original_lead"))status.Text="기록 실패: 게임에 이전 3→2 패치가 남아 있습니다. 양쪽 모두 1.4.6으로 업데이트하고 게임을 종료한 뒤 재실행하세요.";
+              else if(line.StartsWith("Capture failed at require_active_multiplayer"))status.Text="기록 실패: 멀티 경기가 진행 중이 아닙니다. 대기실이 아닌 유닛을 조작할 수 있는 상태에서 시작하세요.";
               else if(line.StartsWith("Capture failed at "))status.Text="기록 실패: "+line+"\n멀티 경기 진입 여부와 게임/런처 실행 권한을 확인하세요.";
             }
             await Task.Run(()=>process.WaitForExit());await errors;
-            if(process.ExitCode==0&&saved!=null)status.Text="저장 완료! 테스트 로그 폴더 열기로 CSV를 확인하세요.\n"+Path.GetFileName(saved);
+            if(interrupted&&saved!=null)status.Text="경기 상태가 바뀌어 기록을 중단했습니다. 부분 CSV를 보존했습니다.\n"+Path.GetFileName(saved);
+            else if(process.ExitCode==0&&saved!=null)status.Text="저장 완료! 테스트 로그 폴더 열기로 CSV를 확인하세요.\n"+Path.GetFileName(saved);
             else if(!status.Text.StartsWith("기록 실패"))status.Text="기록 실패. 테스트 로그 폴더의 capture-error 파일을 확인하세요.";
           }
         } finally {try {File.Delete(helper);}catch { }}

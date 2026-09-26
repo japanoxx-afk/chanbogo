@@ -46,14 +46,19 @@ class MultiplayerCapture {
         stage="open_game_readonly";handle=OpenProcess(0x1010,false,game.Id);
         if(handle==IntPtr.Zero)throw new IOException("Cannot read game process");
         stage="require_active_multiplayer";uint mode=Read(handle,0x70e8c4);
-        if((mode!=1&&mode!=2)||Read(handle,0x71ccfc)!=1)throw new InvalidOperationException("Enter an active multiplayer match first");
+        if((mode!=1&&mode!=2)||Read(handle,0x71ccfc)!=1||Read(handle,0x71c7ec)!=3)throw new InvalidOperationException("Enter an active multiplayer match first");
+        stage="verify_original_lead";
+        if(Read(handle,0x71d28c)!=3)throw new InvalidOperationException("Restart both games using launcher 1.4.6; experimental lead must be off");
         stage="write_samples";
         string output=Path.Combine(folder,session+"-"+role+"-"+Guid.NewGuid().ToString("N").Substring(0,8)+".csv");
+        bool interrupted=false;
         using(var writer=new StreamWriter(new FileStream(output,FileMode.CreateNew,FileAccess.Write),new UTF8Encoding(false))) {
           writer.WriteLine("schema,session,role,elapsed_ms,mode,active,net_state,counter_0c,counter_14,readiness_block,scheduler_clock,drift_accumulator,lead_current,lead_target,queued_command_bytes,game_foreground,right_button_down");
           Console.WriteLine("Recording for "+seconds+" seconds. Return to the game and issue separate right-click orders. Only in-game right-button state is sampled; no text or coordinates.");
           var watch=Stopwatch.StartNew();long next=0;
           while(watch.ElapsedMilliseconds<seconds*1000L) {
+            // Stop at the first session-state change, never combine separate matches.
+            if(game.HasExited||Read(handle,0x70e8c4)!=mode||Read(handle,0x71ccfc)!=1||Read(handle,0x71c7ec)!=3) {interrupted=true;break;}
             uint foregroundPid;GetWindowThreadProcessId(GetForegroundWindow(),out foregroundPid);
             bool foreground=foregroundPid==(uint)game.Id;
             int right=foreground&&(GetAsyncKeyState(2)&0x8000)!=0?1:0;
@@ -61,7 +66,8 @@ class MultiplayerCapture {
             next+=20;long delay=next-watch.ElapsedMilliseconds;if(delay>0)Thread.Sleep((int)delay);
           }
         }
-        Console.WriteLine("Saved "+output);
+        Console.WriteLine((interrupted?"Interrupted ":"Saved ")+output);
+        if(interrupted)return 2;
         Console.WriteLine("Counters are NOT ping or measured input latency. Share only this CSV, not existing crash logs.");
       }
       if(args.Length==0){Console.WriteLine("Press Enter to close.");Console.ReadLine();}return 0;

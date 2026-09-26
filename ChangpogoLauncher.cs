@@ -12,8 +12,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Changpogo Launcher")]
-[assembly: AssemblyVersion("1.4.5.0")]
-[assembly: AssemblyFileVersion("1.4.5.0")]
+[assembly: AssemblyVersion("1.4.6.0")]
+[assembly: AssemblyFileVersion("1.4.6.0")]
 
 namespace ChangpogoLauncher {
   static class Program {
@@ -27,13 +27,13 @@ namespace ChangpogoLauncher {
   }
 
   sealed class LauncherForm : Form {
-    const string VersionText="1.4.5";
+    const string VersionText="1.4.6";
     const string DefaultGame=@"C:\Users\seo\Downloads\DGGL\Games\Changpogo_Win_260708\Changpogo.exe";
     readonly TextBox gamePath=new TextBox();
     readonly TextBox log=new TextBox();
     readonly CheckBox lowLatency=new CheckBox { Text="실행 우선순위 보조",AutoSize=true };
     readonly CheckBox commandLatency=new CheckBox { Text="싱글 명령 지연 줄이기 (시험 적용)",AutoSize=true };
-    readonly CheckBox multiplayerLatency=new CheckBox { Text="멀티 명령 대기 3→2 (시험 · 참가자 전원 동일 설정 필요)",AutoSize=true };
+    readonly CheckBox multiplayerLatency=new CheckBox { Text="멀티 대기 원본 3 유지 (3→2 시험 중단 · 양쪽 업데이트 필요)",AutoSize=true };
     readonly Button play=new Button();
     readonly Button update=new Button();
     readonly ComboBox display=new ComboBox { DropDownStyle=ComboBoxStyle.DropDownList };
@@ -67,7 +67,7 @@ namespace ChangpogoLauncher {
       display.Enabled=!compatibility.Checked;widescreen.Enabled=!compatibility.Checked;
       diagnosticMode.Checked=LoadSetting("diagnostics.txt","true")=="true";diagnosticMode.Location=new Point(20,346);
       Controls.AddRange(new Control[]{compatibility,diagnosticMode});
-      multiplayerLatency.Checked=LoadSetting("multiplayer-latency.txt","false")=="true";multiplayerLatency.Location=new Point(20,380);Controls.Add(multiplayerLatency);
+      multiplayerLatency.Checked=false;multiplayerLatency.Enabled=false;multiplayerLatency.Location=new Point(20,380);Controls.Add(multiplayerLatency);
       Controls.Add(new Label { Text="문제 발생 시 F9: 시점 기록 · 종료 후 진단 폴더 확인",AutoSize=true,Location=new Point(20,415),ForeColor=Color.DimGray });
       var multiplayerTest=new Button { Text="멀티 응답 테스트",Location=new Point(490,408),Size=new Size(205,35) };
       multiplayerTest.Click+=(s,e)=>{using(var dialog=new MultiplayerCaptureForm())dialog.ShowDialog(this);};Controls.Add(multiplayerTest);
@@ -108,7 +108,7 @@ namespace ChangpogoLauncher {
           diagnostics=new GameDiagnostics(source,"latency="+commandLatency.Checked+", multiplayerLead="+(multiplayerLatency.Checked?2:3)+", borderless="+(display.SelectedIndex==1)+", wide="+widescreen.Checked+", compatibility="+compatibility.Checked);
           WriteLog("진단 저장 위치: "+diagnostics.DirectoryPath);
         }
-        process=SinglePlayerPatch.StartObserved(source,commandLatency.Checked,multiplayerLatency.Checked,diagnostics==null?(Action<Process>)null:diagnostics.Attach);
+        process=SinglePlayerPatch.StartObserved(source,commandLatency.Checked,false,diagnostics==null?(Action<Process>)null:diagnostics.Attach);
         if(process==null)throw new InvalidOperationException("게임 프로세스를 시작하지 못했습니다.");
         mouseSession=new MouseCapture(process,captureMouse.Checked,WriteLog);
         WriteLog("화면: "+(compatibility.Checked?"원본 설정 유지":display.Text)+" / F8: 마우스 가두기 전환 / Alt+Tab: 자동 해제");
