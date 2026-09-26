@@ -41,7 +41,12 @@ namespace ChangpogoLauncher {
     }
     internal static Process StartObserved(string path,bool latency,bool multiplayer,Action<Process> observe) {
       string hash,hex,relocations;
-      using(var reader=new StreamReader(Assembly.GetExecutingAssembly().GetManifestResourceStream("latency.manifest"))) {
+#if MULTIPLAYER_EXPERIMENT
+      const string resourceName="multiplayer-experiment.manifest";
+#else
+      const string resourceName="latency.manifest";
+#endif
+      using(var reader=new StreamReader(Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))) {
         hash=reader.ReadLine();hex=reader.ReadLine();relocations=reader.ReadLine();
       }
       // Keep the source locked against writes/replacement through process creation.

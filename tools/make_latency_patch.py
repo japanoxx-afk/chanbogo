@@ -12,7 +12,7 @@ from capstone import Cs, CS_ARCH_X86, CS_MODE_32
 HASH = '16e4c3d3d17438928839a09901a4159da154eb0ec822c784856707b77f9f4b1f'
 START, END, BASE = 0x488bb3, 0x48904d, 0x10000000
 
-def generate(path):
+def generate(path, multiplayer=False):
     raw = open(path, 'rb').read()
     assert hashlib.sha256(raw).hexdigest() == HASH, 'Unsupported executable'
     pe = pefile.PE(data=raw)
@@ -21,26 +21,32 @@ def generate(path):
     assert instructions[-1].address + instructions[-1].size == END
     # The existing float constant is read-only and covered by the whole-file hash.
     section = pe.sections[1]
-    const_offset = section.get_data().find(struct.pack('<f', 50.0))
+    period = 100 if multiplayer else 50
+    const_offset = section.get_data().find(struct.pack('<f', float(period)))
     assert const_offset >= 0
     fifty = 0x400000 + section.VirtualAddress + const_offset
     changes = {
-        0x488c71: ('b8c8000000', b'\xb8'+struct.pack('<i',50)),
-        0x488c88: ('81c738ffffff', b'\x81\xc7'+struct.pack('<i',-50)),
-        0x488cae: ('8d8f38ffffff', b'\x8d\x8f'+struct.pack('<i',-50)),
-        0x488cb4: ('81c738ffffff', b'\x81\xc7'+struct.pack('<i',-50)),
+        0x488c71: ('b8c8000000', b'\xb8'+struct.pack('<i',period)),
+        0x488c88: ('81c738ffffff', b'\x81\xc7'+struct.pack('<i',-period)),
+        0x488cae: ('8d8f38ffffff', b'\x8d\x8f'+struct.pack('<i',-period)),
+        0x488cb4: ('81c738ffffff', b'\x81\xc7'+struct.pack('<i',-period)),
         0x488db6: ('d80d88d76900', b'\xd8\x0d'+struct.pack('<I',fifty)),
-        0x488dc3: ('b839ffffff', b'\xb8'+struct.pack('<i',-49)),
-        0x488dcb: ('b9c7000000', b'\xb9'+struct.pack('<i',49)),
-        0x488e3d: ('05c8000000', b'\x05'+struct.pack('<i',50)),
+        0x488dc3: ('b839ffffff', b'\xb8'+struct.pack('<i',1-period)),
+        0x488dcb: ('b9c7000000', b'\xb9'+struct.pack('<i',period-1)),
+        0x488e3d: ('05c8000000', b'\x05'+struct.pack('<i',period)),
         # Original credit is 200 / speed_ms. Scale to 50 / speed_ms;
         # leave simulation ticks, AI time, animation and game-speed tables alone.
         0x488f14: ('d88680000000', bytes.fromhex('d80de4d36900d88680000000')),
     }
+    if multiplayer:
+        half_offset = section.get_data().find(struct.pack('<f', 0.5))
+        assert half_offset >= 0
+        half = 0x400000 + section.VirtualAddress + half_offset
+        changes[0x488f14] = ('d88680000000', b'\xd8\x0d'+struct.pack('<I',half)+bytes.fromhex('d88680000000'))
     # Single-player has no remote clock to chase. Anchor each successful batch
     # to now instead of the multiplayer drift controller. It otherwise couples
     # short batches to a controller tuned for 200ms.
-    branch_override = {0x488ccc: ('jmp', 0x488cf2)}
+    branch_override = {} if multiplayer else {0x488ccc: ('jmp', 0x488cf2)}
     mapping, cursor = {}, 64
     def branch(i):
         return i.mnemonic in ('call','jmp') or i.mnemonic.startswith('j')
@@ -54,6 +60,8 @@ def generate(path):
     relocs = []
     # Preserve flags in both modes. Multiplayer bypasses the clone completely.
     stub = bytes.fromhex('9c833dc4e87000007506') + b'\x9d\xe9' + struct.pack('<i',64-16)
+    if multiplayer:
+        stub = stub[:8] + b'\x74' + stub[9:]
     stub += b'\x9d' + bytes.fromhex('558bec83ec40') + b'\xe9'
     relocs.append(len(stub))
     stub += struct.pack('<i',START+6-(BASE+len(stub)+4))
@@ -82,8 +90,24 @@ def generate(path):
             result.extend(i.bytes)
     return bytes(result), relocs, mapping
 
+def combined_candidate(path):
+    single, sr, _ = generate(path)
+    multi, mr, _ = generate(path, multiplayer=True)
+    offset = len(single)
+    result = bytearray(single)
+    # The single stub restores flags at byte 16 before its original fallback.
+    # Replace that fallback with a relative jump to the multiplayer stub.
+    assert result[16:24] == bytes.fromhex('9d558bec83ec40e9')
+    result[17:28] = b'\xe9' + struct.pack('<i', offset-22) + b'\x90'*6
+    relocated_multi = bytearray(multi)
+    for r in mr:
+        value = struct.unpack_from('<i', relocated_multi, r)[0]
+        struct.pack_into('<i', relocated_multi, r, value-offset)
+    result.extend(relocated_multi)
+    return bytes(result), [r for r in sr if r != 24] + [offset+r for r in mr], {}
+
 if __name__ == '__main__':
-    code, relocs, _ = generate(sys.argv[1])
+    code, relocs, _ = combined_candidate(sys.argv[1]) if '--multiplayer-experiment' in sys.argv else generate(sys.argv[1])
     print(HASH)
     print(code.hex())
     print(','.join(str(r) for r in relocs))

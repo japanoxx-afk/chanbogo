@@ -47,6 +47,10 @@ class MultiplayerCapture {
         if(handle==IntPtr.Zero)throw new IOException("Cannot read game process");
         stage="require_active_multiplayer";uint mode=Read(handle,0x70e8c4);
         if((mode!=1&&mode!=2)||Read(handle,0x71ccfc)!=1||Read(handle,0x71c7ec)!=3)throw new InvalidOperationException("Enter an active multiplayer match first");
+        // User-selected role may be wrong. The verified running game's mode is authoritative.
+        string actualRole=mode==1?"host":"client";
+        if(role!=actualRole)Console.WriteLine("Role corrected to "+actualRole+" from active game mode.");
+        role=actualRole;
         stage="verify_original_lead";
         if(Read(handle,0x71d28c)!=3)throw new InvalidOperationException("Restart both games using launcher 1.4.6; experimental lead must be off");
         stage="write_samples";

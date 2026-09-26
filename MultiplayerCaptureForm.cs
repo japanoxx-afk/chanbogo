@@ -46,6 +46,7 @@ namespace ChangpogoLauncher {
             while((line=await process.StandardOutput.ReadLineAsync())!=null) {
               if(line.StartsWith("Recording for "))status.Text="기록 중 (60초) · 게임으로 돌아가 약 3초마다 우클릭 이동 명령을 내려주세요.";
               else if(line.StartsWith("Saved "))saved=line.Substring(6);
+              else if(line.StartsWith("Role corrected to "))status.Text="실제 게임 모드에 맞춰 방장/참가자 구분을 자동 보정했습니다.";
               else if(line.StartsWith("Interrupted ")){saved=line.Substring(12);interrupted=true;}
               else if(line.StartsWith("Capture failed at verify_original_lead"))status.Text="기록 실패: 게임에 이전 3→2 패치가 남아 있습니다. 양쪽 모두 1.4.6으로 업데이트하고 게임을 종료한 뒤 재실행하세요.";
               else if(line.StartsWith("Capture failed at require_active_multiplayer"))status.Text="기록 실패: 멀티 경기가 진행 중이 아닙니다. 대기실이 아닌 유닛을 조작할 수 있는 상태에서 시작하세요.";

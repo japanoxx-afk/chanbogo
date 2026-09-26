@@ -18,13 +18,14 @@ manifest = pathlib.Path(__file__).resolve().parents[1].joinpath('latency.manifes
 assert bytes.fromhex(manifest[1]) == code
 assert list(map(int,manifest[2].split(','))) == relocations
 
-def run(patched, mode, address=BASE, speed=100):
+def run(patched, mode, address=BASE, speed=100, candidate=None, blocked_until=0, duration=2000):
     uc = Uc(UC_ARCH_X86, UC_MODE_32)
     uc.mem_map(0x400000, 0x500000)
     uc.mem_write(0x400000,pe.get_memory_mapped_image())
     uc.mem_map(address,0x10000)
-    installed = bytearray(code)
-    for offset in relocations:
+    selected_code, selected_relocs = (code, relocations) if candidate is None else candidate[:2]
+    installed = bytearray(selected_code)
+    for offset in selected_relocs:
         old = struct.unpack_from('<i',installed,offset)[0]
         struct.pack_into('<I',installed,offset,(old+BASE-address)&0xffffffff)
     uc.mem_write(address,bytes(installed))
@@ -40,7 +41,7 @@ def run(patched, mode, address=BASE, speed=100):
     clock=1; received=0; sent=0; deliveries=[]; queue=[]; batches=[]; credit=0.0
     def handler(uc,pc,size,user):
         nonlocal received,sent,credit
-        if START<=pc<END or address<=pc<address+len(code) or 0x689518<=pc<0x68953f:
+        if START<=pc<END or address<=pc<address+len(selected_code) or 0x689518<=pc<0x68953f:
             return
         esp=uc.reg_read(UC_X86_REG_ESP)
         count,value=0,0
@@ -48,6 +49,11 @@ def run(patched, mode, address=BASE, speed=100):
         elif pc==0x450956: count=4
         elif pc==0x64d207: count=8;value=(get(esp+8)-get(esp+4))&0xffffffff
         elif pc==0x45099a:
+            if clock<blocked_until:
+                uc.reg_write(UC_X86_REG_EAX,0)
+                uc.reg_write(UC_X86_REG_EIP,get(esp))
+                uc.reg_write(UC_X86_REG_ESP,esp+4)
+                return
             value=1;received=sent;batches.append(clock)
             if queue: deliveries.extend(clock-q for q in queue);queue.clear()
         elif pc==0x451847: value=0
@@ -60,12 +66,13 @@ def run(patched, mode, address=BASE, speed=100):
         elif pc==0x580b0b: value=0
         elif pc==0x4e7ae5: value=0
         elif pc in (0x489a8a,0x489e25): pass
+        elif pc==0x428e62: count=4
         else: raise AssertionError(f'Unexpected engine call {pc:#x}')
         uc.reg_write(UC_X86_REG_EAX,value)
         uc.reg_write(UC_X86_REG_EIP,get(esp))
         uc.reg_write(UC_X86_REG_ESP,esp+4+count)
     uc.hook_add(UC_HOOK_CODE,handler)
-    for clock in range(2,2002):
+    for clock in range(2,duration+2):
         # The simulation consumes accumulated credit separately; count all credit
         # without modifying the game-speed table or simulation-tick function.
         if (clock-1) % speed == 0:
