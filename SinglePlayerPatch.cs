@@ -85,6 +85,27 @@ namespace ChangpogoLauncher {
               var verified=new byte[8];Require(ReadProcessMemory(pi.process,location,verified,(UIntPtr)8,out count));
               if(count.ToUInt64()!=8||BitConverter.ToString(verified)!=BitConverter.ToString(values))throw new InvalidDataException("카메라 거리·시야 적용 확인 실패");
             } finally {Require(VirtualProtectEx(pi.process,location,(UIntPtr)8,old,out unused));}
+            // Wheel maps pitch to span [14,26] separately. Redirect ONLY its
+            // two operands: the original constants are shared by other systems.
+            var wheelValues=new byte[8];float maxSpan=26f*cameraPercent/100f;
+            Buffer.BlockCopy(BitConverter.GetBytes(maxSpan-14f),0,wheelValues,0,4);
+            Buffer.BlockCopy(BitConverter.GetBytes(maxSpan),0,wheelValues,4,4);
+            var wheelRegion=VirtualAllocEx(pi.process,IntPtr.Zero,(UIntPtr)8,0x3000,4);Require(wheelRegion!=IntPtr.Zero);
+            Require(WriteProcessMemory(pi.process,wheelRegion,wheelValues,(UIntPtr)8,out count));Require(count.ToUInt64()==8);
+            Require(VirtualProtectEx(pi.process,wheelRegion,(UIntPtr)8,2,out old));
+            int[] sites={0x43970a,0x439785};string[] expected={"d80d28d96900","d90520d96900"};
+            for(int i=0;i<2;i++) {
+              var site=new IntPtr(sites[i]);var prior=new byte[6];
+              Require(ReadProcessMemory(pi.process,site,prior,(UIntPtr)6,out count));
+              if(count.ToUInt64()!=6||BitConverter.ToString(prior)!=BitConverter.ToString(Decode(expected[i])))throw new InvalidDataException("휠 카메라 코드 검증 실패");
+              var operand=new IntPtr(sites[i]+2);var target=BitConverter.GetBytes(unchecked(wheelRegion.ToInt32()+i*4));
+              Require(VirtualProtectEx(pi.process,operand,(UIntPtr)4,0x40,out old));
+              try {Require(WriteProcessMemory(pi.process,operand,target,(UIntPtr)4,out count));Require(count.ToUInt64()==4);}
+              finally {Require(VirtualProtectEx(pi.process,operand,(UIntPtr)4,old,out unused));}
+              var check=new byte[4];Require(ReadProcessMemory(pi.process,operand,check,(UIntPtr)4,out count));
+              if(count.ToUInt64()!=4||BitConverter.ToString(check)!=BitConverter.ToString(target))throw new InvalidDataException("휠 카메라 적용 확인 실패");
+            }
+            Require(FlushInstructionCache(pi.process,IntPtr.Zero,UIntPtr.Zero));
           }
           if(multiplayer) {
             // Only the non-single-player initializer: push 3 -> push 2.
@@ -118,14 +139,13 @@ namespace ChangpogoLauncher {
           uint unused;Require(VirtualProtectEx(pi.process,entry,(UIntPtr)6,old,out unused));
           Require(FlushInstructionCache(pi.process,IntPtr.Zero,UIntPtr.Zero));
           }
-          // Training duration is returned as 16.16 fixed point. Halve only the
-          // three playable farmer IDs, AFTER normal upgrades/minimum calculation.
-          // Use the argument, not EBX: an early fallback path leaves EBX unset.
+          // Halve positive 16.16 training duration for ALL unit types, once.
+          // Replaces (not stacks with) the earlier farmer-only patch.
           {
             var entry=new IntPtr(0x416237);var expected=Decode("5f5e5bc9c20400");var actual=new byte[7];
             Require(ReadProcessMemory(pi.process,entry,actual,(UIntPtr)7,out count));
             if(count.ToUInt64()!=7||BitConverter.ToString(actual)!=BitConverter.ToString(expected))throw new InvalidDataException("농부 생산시간 코드 검증 실패");
-            var code=Decode("837d0803740c837d08197406837d08267502d1e85f5e5bc9c20400");
+            var code=Decode("85c07e02d1e85f5e5bc9c20400");
             var region=VirtualAllocEx(pi.process,IntPtr.Zero,(UIntPtr)code.Length,0x3000,4);Require(region!=IntPtr.Zero);
             Require(WriteProcessMemory(pi.process,region,code,(UIntPtr)code.Length,out count));Require(count.ToUInt64()==(ulong)code.Length);
             uint old,unused;Require(VirtualProtectEx(pi.process,region,(UIntPtr)code.Length,0x20,out old));

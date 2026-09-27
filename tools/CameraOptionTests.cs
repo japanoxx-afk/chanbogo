@@ -35,6 +35,12 @@ class CameraOptionTests {
         Check(ReadProcessMemory(p.Handle,new IntPtr(0x69d7bc),bytes,(UIntPtr)8,out read)&&read.ToUInt64()==8,"Camera read");
         Check(BitConverter.ToSingle(bytes,0)==36f*percent/100f,"Installed camera distance");
         Check(BitConverter.ToSingle(bytes,4)==26f*percent/100f,"Installed view span");
+        foreach(int site in new[]{0x43970c,0x439787}) {
+          var pointer=new byte[4];Check(ReadProcessMemory(p.Handle,new IntPtr(site),pointer,(UIntPtr)4,out read)&&read.ToUInt64()==4,"Wheel pointer");
+          var constant=new byte[4];Check(ReadProcessMemory(p.Handle,new IntPtr(BitConverter.ToInt32(pointer,0)),constant,(UIntPtr)4,out read)&&read.ToUInt64()==4,"Wheel constant");
+          float expected=26f*percent/100f-(site==0x43970c?14f:0f);
+          Check(BitConverter.ToSingle(constant,0)==expected,"Installed wheel range");
+        }
         inspected=true;throw new OperationCanceledException("Probe complete; do not resume game");
       };
       try {patch.GetMethod("StartConfigured",flags).Invoke(null,new object[]{args[1],true,false,percent,observe});throw new Exception("Unexpected resume");}
@@ -42,6 +48,6 @@ class CameraOptionTests {
       Check(inspected,"Probe missing");
       try {using(var p=Process.GetProcessById(pid))Check(p.WaitForExit(3000),"Child cleanup");}catch(ArgumentException){}
     }
-    Console.WriteLine("PASS 51 numeric values, invalid bounds, UI layout, suspended-child memory 100/125/150%, child cleanup");
+    Console.WriteLine("PASS 51 numeric values, invalid bounds, suspended-child distance/span/wheel range 100/125/150%, child cleanup");
   }
 }

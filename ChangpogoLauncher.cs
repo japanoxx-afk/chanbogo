@@ -13,8 +13,8 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Changpogo Launcher")]
 #if STABLE_RELEASE
-[assembly: AssemblyVersion("1.6.4.0")]
-[assembly: AssemblyFileVersion("1.6.4.0")]
+[assembly: AssemblyVersion("1.6.5.0")]
+[assembly: AssemblyFileVersion("1.6.5.0")]
 #elif MULTIPLAYER_75MS
 [assembly: AssemblyVersion("1.5.2.0")]
 [assembly: AssemblyFileVersion("1.5.2.0")]
@@ -39,7 +39,7 @@ namespace ChangpogoLauncher {
 
   sealed class LauncherForm : Form {
 #if STABLE_RELEASE
-    const string VersionText="1.6.4";
+    const string VersionText="1.6.5";
     const string ExperimentPeriod="75";
 #elif MULTIPLAYER_75MS
     const string VersionText="1.5.2";
@@ -173,7 +173,7 @@ namespace ChangpogoLauncher {
         if(multiplayerLatency.Checked&&MessageBox.Show(this,"참가자 전원이 v1.4.4 이상에서 같은 멀티 대기 옵션을 켜고 게임을 재시작해야 합니다.\n\n통신 대기 여유가 줄어 끊김이 늘 수 있는 시험 기능입니다. 문제가 생기면 전원이 옵션을 끄고 재시작하세요.\n계속할까요?","멀티 명령 대기 시험",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
         SaveSetting("multiplayer-latency.txt",multiplayerLatency.Checked?"true":"false");
         FarmerBalancePatch.Apply(source);
-        WriteLog("농부 밸런스: 청해진·당·일본 쌀 50 / 생산시간 50%. 멀티 참가자 전원 같은 버전 사용 필수.");
+        WriteLog("밸런스: 농부 쌀 50 / 모든 유닛 생산·건물 건설시간 50%. 멀티 참가자 전원 1.6.5 사용 필수.");
         DisplayOptions.PrepareCompatible(source,display.SelectedIndex==1,widescreen.Checked,compatibility.Checked);
         SaveSetting("preserve-display-profile.txt",compatibility.Checked?"true":"false");SaveSetting("diagnostics.txt",diagnosticMode.Checked?"true":"false");
         SaveSetting("widescreen.txt",widescreen.Checked?"true":"false");
