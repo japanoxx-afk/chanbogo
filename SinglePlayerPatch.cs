@@ -40,6 +40,14 @@ namespace ChangpogoLauncher {
       return StartObserved(path,latency,false,observe);
     }
     internal static Process StartObserved(string path,bool latency,bool multiplayer,Action<Process> observe) {
+      return StartConfigured(path,latency,multiplayer,100,observe);
+    }
+    internal static float CameraDistance(int percent) {
+      if(percent<100||percent>150)throw new ArgumentOutOfRangeException("percent","카메라 거리는 100~150% 범위여야 합니다.");
+      return 36f*percent/100f;
+    }
+    internal static Process StartConfigured(string path,bool latency,bool multiplayer,int cameraPercent,Action<Process> observe) {
+      float cameraDistance=CameraDistance(cameraPercent);
       string hash,hex,relocations;
 #if MULTIPLAYER_75MS
       const string resourceName="multiplayer-75ms.manifest";
@@ -54,13 +62,26 @@ namespace ChangpogoLauncher {
       // Keep the source locked against writes/replacement through process creation.
       using(var source=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read)) {
         using(var sha=SHA256.Create())
-          if((latency||multiplayer)&&!string.Equals(BitConverter.ToString(sha.ComputeHash(source)).Replace("-",""),hash,StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("이 게임 버전은 명령 지연 패치 지원 대상이 아닙니다. 명령 지연 옵션을 끄면 원본으로 실행할 수 있습니다.");
+          if(!string.Equals(BitConverter.ToString(sha.ComputeHash(source)).Replace("-",""),hash,StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("이 게임 버전은 명령 지연·농부 패치 지원 대상이 아닙니다.");
         var si=new StartupInfo();si.cb=Marshal.SizeOf(typeof(StartupInfo));ProcessInfo pi;
         Require(CreateProcess(path,new StringBuilder(LauncherForm.Quote(path)),IntPtr.Zero,IntPtr.Zero,false,4,IntPtr.Zero,Path.GetDirectoryName(path),ref si,out pi));
         bool resumed=false;Process managed=null;
         try {
           UIntPtr count;
+          if(cameraPercent!=100) {
+            // Shared default for constructor, map load and camera reset. No
+            // changes to pitch, FOV, fog, unit LOS or on-disk executable.
+            var location=new IntPtr(0x69d7bc);var original=new byte[4];
+            Require(ReadProcessMemory(pi.process,location,original,(UIntPtr)4,out count));
+            if(count.ToUInt64()!=4||BitConverter.ToSingle(original,0)!=36f)throw new InvalidDataException("카메라 기본 거리 검증 실패");
+            uint old,unused;Require(VirtualProtectEx(pi.process,location,(UIntPtr)4,4,out old));
+            try {
+              Require(WriteProcessMemory(pi.process,location,BitConverter.GetBytes(cameraDistance),(UIntPtr)4,out count));Require(count.ToUInt64()==4);
+              var verified=new byte[4];Require(ReadProcessMemory(pi.process,location,verified,(UIntPtr)4,out count));
+              if(count.ToUInt64()!=4||BitConverter.ToSingle(verified,0)!=cameraDistance)throw new InvalidDataException("카메라 거리 적용 확인 실패");
+            } finally {Require(VirtualProtectEx(pi.process,location,(UIntPtr)4,old,out unused));}
+          }
           if(multiplayer) {
             // Only the non-single-player initializer: push 3 -> push 2.
             // Do not change turn cadence, readiness checks, packets or simulation speed.
@@ -92,6 +113,24 @@ namespace ChangpogoLauncher {
           Require(WriteProcessMemory(pi.process,entry,hook,(UIntPtr)6,out count));Require(count.ToUInt64()==6);
           uint unused;Require(VirtualProtectEx(pi.process,entry,(UIntPtr)6,old,out unused));
           Require(FlushInstructionCache(pi.process,IntPtr.Zero,UIntPtr.Zero));
+          }
+          // Training duration is returned as 16.16 fixed point. Halve only the
+          // three playable farmer IDs, AFTER normal upgrades/minimum calculation.
+          // Use the argument, not EBX: an early fallback path leaves EBX unset.
+          {
+            var entry=new IntPtr(0x416237);var expected=Decode("5f5e5bc9c20400");var actual=new byte[7];
+            Require(ReadProcessMemory(pi.process,entry,actual,(UIntPtr)7,out count));
+            if(count.ToUInt64()!=7||BitConverter.ToString(actual)!=BitConverter.ToString(expected))throw new InvalidDataException("농부 생산시간 코드 검증 실패");
+            var code=Decode("837d0803740c837d08197406837d08267502d1e85f5e5bc9c20400");
+            var region=VirtualAllocEx(pi.process,IntPtr.Zero,(UIntPtr)code.Length,0x3000,4);Require(region!=IntPtr.Zero);
+            Require(WriteProcessMemory(pi.process,region,code,(UIntPtr)code.Length,out count));Require(count.ToUInt64()==(ulong)code.Length);
+            uint old,unused;Require(VirtualProtectEx(pi.process,region,(UIntPtr)code.Length,0x20,out old));
+            var jump=Decode("e9000000009090");
+            Buffer.BlockCopy(BitConverter.GetBytes(unchecked(region.ToInt32()-0x41623c)),0,jump,1,4);
+            Require(VirtualProtectEx(pi.process,entry,(UIntPtr)7,0x40,out old));
+            Require(WriteProcessMemory(pi.process,entry,jump,(UIntPtr)7,out count));Require(count.ToUInt64()==7);
+            Require(VirtualProtectEx(pi.process,entry,(UIntPtr)7,old,out unused));
+            Require(FlushInstructionCache(pi.process,IntPtr.Zero,UIntPtr.Zero));
           }
           managed=Process.GetProcessById((int)pi.pid);
           // Retain a process handle before it can exit, so ExitCode stays available.

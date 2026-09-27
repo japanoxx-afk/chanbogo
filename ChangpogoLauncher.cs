@@ -13,8 +13,8 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Changpogo Launcher")]
 #if STABLE_RELEASE
-[assembly: AssemblyVersion("1.6.0.0")]
-[assembly: AssemblyFileVersion("1.6.0.0")]
+[assembly: AssemblyVersion("1.6.3.0")]
+[assembly: AssemblyFileVersion("1.6.3.0")]
 #elif MULTIPLAYER_75MS
 [assembly: AssemblyVersion("1.5.2.0")]
 [assembly: AssemblyFileVersion("1.5.2.0")]
@@ -39,7 +39,7 @@ namespace ChangpogoLauncher {
 
   sealed class LauncherForm : Form {
 #if STABLE_RELEASE
-    const string VersionText="1.6.0";
+    const string VersionText="1.6.3";
     const string ExperimentPeriod="75";
 #elif MULTIPLAYER_75MS
     const string VersionText="1.5.2";
@@ -65,11 +65,13 @@ namespace ChangpogoLauncher {
     GameDiagnostics diagnostics;
     GameClockOverlay gameClock;
     readonly CheckBox showGameClock=new CheckBox {Text="게임 시간 표시",AutoSize=true};
+    readonly NumericUpDown cameraPercent=new NumericUpDown {Minimum=100,Maximum=150,Increment=5,DecimalPlaces=0,Value=100};
     readonly CheckBox compatibility=new CheckBox { Text="미니맵 정상 설정 복원·유지 (화면 강제 설정 안 함)",AutoSize=true };
     readonly CheckBox diagnosticMode=new CheckBox { Text="충돌·멀티 진단 기록 (로컬 메모리 덤프 · 자동 전송 없음)",AutoSize=true };
 
     public LauncherForm() {
-      Text="해상왕 장보고 런처";ClientSize=new Size(720,670);MinimumSize=new Size(740,710);
+      SuspendLayout();AutoScaleDimensions=new SizeF(96,96);AutoScaleMode=AutoScaleMode.Dpi;
+      Text="해상왕 장보고 런처";ClientSize=new Size(720,735);MinimumSize=new Size(740,775);
       Font=new Font("맑은 고딕",10F);StartPosition=FormStartPosition.CenterScreen;
       var title=new Label { Text="해상왕 장보고",Font=new Font("맑은 고딕",22F,FontStyle.Bold),AutoSize=true,Location=new Point(22,18) };
       var version=new Label { Text="Launcher v"+VersionText,AutoSize=true,ForeColor=Color.SteelBlue,Location=new Point(250,39) };
@@ -108,15 +110,46 @@ namespace ChangpogoLauncher {
       var multiplayerTest=new Button { Text="멀티 응답 테스트",Location=new Point(490,408),Size=new Size(205,35) };
       multiplayerTest.Click+=(s,e)=>{using(var dialog=new MultiplayerCaptureForm())dialog.ShowDialog(this);};Controls.Add(multiplayerTest);
       FormClosed+=(s,e)=>{if(gameClock!=null)gameClock.Dispose();if(mouseSession!=null)mouseSession.Dispose();if(diagnostics!=null)diagnostics.Dispose();};
-      play.Text="게임 실행";play.Font=new Font(Font,FontStyle.Bold);play.Location=new Point(20,460);play.Size=new Size(180,44);
-      update.Text="런처 업데이트";update.Location=new Point(215,460);update.Size=new Size(180,44);
-      var reports=new Button { Text="진단 폴더 열기",Location=new Point(410,460),Size=new Size(180,44) };
+      Controls.Add(new Label {Text="카메라 거리 (시험)",AutoSize=true,Location=new Point(20,464)});
+      int savedCamera;
+      if(!int.TryParse(LoadSetting("camera-distance-percent.txt","100"),out savedCamera)||savedCamera<100||savedCamera>150)savedCamera=100;
+      cameraPercent.Value=savedCamera;cameraPercent.Location=new Point(165,460);cameraPercent.Size=new Size(75,28);
+      cameraPercent.ValueChanged+=(s,e)=>SaveSetting("camera-distance-percent.txt",cameraPercent.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+      var resetCamera=new Button {Text="100% 복원",Location=new Point(450,458),Size=new Size(110,30)};
+      resetCamera.Click+=(s,e)=>{cameraPercent.Value=100;};
+      Controls.AddRange(new Control[]{cameraPercent,resetCamera,new Label {Text="% · 기본 100 / 최대 150",AutoSize=true,Location=new Point(250,464)},new Label {Text="다음 실행부터 적용 · 새 싱글 게임에서 먼저 확인 · 이상 시 100%로 복원",AutoSize=true,ForeColor=Color.DimGray,Location=new Point(20,495)}});
+      play.Text="게임 실행";play.Font=new Font(Font,FontStyle.Bold);play.Location=new Point(20,525);play.Size=new Size(180,44);
+      update.Text="런처 업데이트";update.Location=new Point(215,525);update.Size=new Size(180,44);
+      var reports=new Button { Text="진단 폴더 열기",Location=new Point(410,525),Size=new Size(180,44) };
       reports.Click+=(s,e)=>{try {Directory.CreateDirectory(GameDiagnostics.Root);Process.Start(new ProcessStartInfo { FileName=GameDiagnostics.Root,UseShellExecute=true });}catch(Exception ex){WriteLog(ex.Message);}};Controls.Add(reports);
       play.Click+=StartGame;update.Click+=async (s,e)=>await CheckUpdate();
-      log.Location=new Point(20,525);log.Size=new Size(675,125);log.Multiline=true;log.ReadOnly=true;log.ScrollBars=ScrollBars.Vertical;
+      log.Location=new Point(20,590);log.Size=new Size(675,125);log.Multiline=true;log.ReadOnly=true;log.ScrollBars=ScrollBars.Vertical;
       log.BackColor=Color.FromArgb(25,25,28);log.ForeColor=Color.Gainsboro;log.Font=new Font("Consolas",9F);
       Controls.AddRange(new Control[]{title,version,subtitle,pathLabel,gamePath,browse,lowLatency,lowHint,play,update,log});
-      WriteLog("런처 v"+VersionText+" 준비됨. 원본 게임 파일은 변경하지 않습니다.");
+      // Size rows from their contents rather than mixing DPI-scaled fonts with
+      // fixed pixel coordinates. Narrow windows wrap; short displays scroll.
+      Controls.Clear();AutoScroll=true;
+      var layout=new TableLayoutPanel {Dock=DockStyle.Top,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,ColumnCount=1,Padding=new Padding(14)};
+      layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+      Action<Control[]> row=items=>{
+        var panel=new FlowLayoutPanel {AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,Dock=DockStyle.Fill,WrapContents=true,Margin=new Padding(0,3,0,3)};
+        foreach(var item in items) {item.Margin=new Padding(5);if(item is Button){item.AutoSize=true;((Button)item).AutoSizeMode=AutoSizeMode.GrowAndShrink;}panel.Controls.Add(item);}
+        layout.Controls.Add(panel,0,layout.RowCount++);
+      };
+      row(new Control[]{title,version});row(new Control[]{subtitle});row(new Control[]{pathLabel});
+      var pathRow=new TableLayoutPanel {AutoSize=true,Dock=DockStyle.Fill,ColumnCount=2};
+      pathRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));pathRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+      gamePath.Dock=DockStyle.Fill;browse.AutoSize=true;pathRow.Controls.Add(gamePath,0,0);pathRow.Controls.Add(browse,1,0);layout.Controls.Add(pathRow,0,layout.RowCount++);
+      row(new Control[]{lowLatency});row(new Control[]{lowHint});row(new Control[]{commandLatency,showGameClock});
+      row(new Control[]{display,captureMouse});row(new Control[]{widescreen});row(new Control[]{compatibility});row(new Control[]{diagnosticMode});row(new Control[]{multiplayerLatency});
+      row(new Control[]{multiplayerTest});
+      cameraPercent.MinimumSize=new Size(100,0);
+      row(new Control[]{new Label {Text="카메라 거리 (시험)",AutoSize=true},cameraPercent,new Label {Text="% (100~150)",AutoSize=true},resetCamera});
+      row(new Control[]{new Label {Text="다음 실행부터 적용 · 이상 시 100%로 복원",AutoSize=true}});
+      row(new Control[]{play,update,reports});
+      log.Dock=DockStyle.Fill;log.MinimumSize=new Size(0,120);layout.Controls.Add(log,0,layout.RowCount++);
+      Controls.Add(layout);ResumeLayout(true);
+      WriteLog("런처 v"+VersionText+" 준비됨. EXE는 보존하며 농부 비용 데이터는 원본 백업 후 적용합니다.");
     }
 
     string LoadSetting(string name,string fallback) { try { var path=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,name);return File.Exists(path)?File.ReadAllText(path).Trim():fallback; } catch { return fallback; } }
@@ -139,6 +172,8 @@ namespace ChangpogoLauncher {
 #endif
         if(multiplayerLatency.Checked&&MessageBox.Show(this,"참가자 전원이 v1.4.4 이상에서 같은 멀티 대기 옵션을 켜고 게임을 재시작해야 합니다.\n\n통신 대기 여유가 줄어 끊김이 늘 수 있는 시험 기능입니다. 문제가 생기면 전원이 옵션을 끄고 재시작하세요.\n계속할까요?","멀티 명령 대기 시험",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
         SaveSetting("multiplayer-latency.txt",multiplayerLatency.Checked?"true":"false");
+        FarmerBalancePatch.Apply(source);
+        WriteLog("농부 밸런스: 청해진·당·일본 쌀 50 / 생산시간 50%. 멀티 참가자 전원 같은 버전 사용 필수.");
         DisplayOptions.PrepareCompatible(source,display.SelectedIndex==1,widescreen.Checked,compatibility.Checked);
         SaveSetting("preserve-display-profile.txt",compatibility.Checked?"true":"false");SaveSetting("diagnostics.txt",diagnosticMode.Checked?"true":"false");
         SaveSetting("widescreen.txt",widescreen.Checked?"true":"false");
@@ -147,7 +182,10 @@ namespace ChangpogoLauncher {
           diagnostics=new GameDiagnostics(source,"latency="+commandLatency.Checked+", multiplayerLead="+(multiplayerLatency.Checked?2:3)+", borderless="+(display.SelectedIndex==1)+", wide="+widescreen.Checked+", compatibility="+compatibility.Checked);
           WriteLog("진단 저장 위치: "+diagnostics.DirectoryPath);
         }
-        process=SinglePlayerPatch.StartObserved(source,commandLatency.Checked,false,diagnostics==null?(Action<Process>)null:diagnostics.Attach);
+        int camera=(int)cameraPercent.Value;
+        SaveSetting("camera-distance-percent.txt",camera.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        process=SinglePlayerPatch.StartConfigured(source,commandLatency.Checked,false,camera,diagnostics==null?(Action<Process>)null:diagnostics.Attach);
+        WriteLog("카메라 거리: "+camera+"% ("+SinglePlayerPatch.CameraDistance(camera).ToString("0.##")+") / 저장 게임·연출에서는 별도 카메라가 사용될 수 있습니다.");
         if(process==null)throw new InvalidOperationException("게임 프로세스를 시작하지 못했습니다.");
         mouseSession=new MouseCapture(process,captureMouse.Checked,WriteLog);
         if(showGameClock.Checked&&commandLatency.Checked)try {gameClock=new GameClockOverlay(process);}catch(Exception ex){WriteLog("게임 시간 표시 실패 (게임은 계속 실행): "+ex.Message);}
@@ -200,7 +238,7 @@ namespace ChangpogoLauncher {
     static async Task<UpdateInfo> FindUpdate(HttpClient http) {
       // The manifest explicitly selects the update, including experimental builds.
       const string manifest="https://raw.githubusercontent.com/japanoxx-afk/chanbogo/main/update.json";
-      var fallback=await http.GetStringAsync(manifest);
+      var fallback=await http.GetStringAsync(manifest+"?t="+DateTime.UtcNow.Ticks);
       var version=Regex.Match(fallback,"\\\"version\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
       var url=Regex.Match(fallback,"\\\"url\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
       if(!version.Success||!url.Success)throw new InvalidDataException("update.json 형식이 잘못되었습니다.");
