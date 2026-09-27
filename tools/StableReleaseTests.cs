@@ -5,7 +5,7 @@ using System.Windows.Forms;
 class StableReleaseTests {
   [STAThread] static void Main(string[] args) {
     var a=Assembly.LoadFrom(args[0]);
-    if(a.GetName().Version.ToString()!="1.6.3.0")throw new Exception("Unexpected stable version");
+    if(a.GetName().Version.ToString()!="1.6.4.0")throw new Exception("Unexpected stable version");
     using(var resource=a.GetManifestResourceStream("multiplayer-75ms.manifest"))
     using(var reader=new StreamReader(resource))
       if(reader.ReadToEnd().Trim()!=File.ReadAllText(args[1]).Trim())throw new Exception("Gameplay manifest changed");

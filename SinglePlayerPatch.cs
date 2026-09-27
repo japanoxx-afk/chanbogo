@@ -71,16 +71,20 @@ namespace ChangpogoLauncher {
           UIntPtr count;
           if(cameraPercent!=100) {
             // Shared default for constructor, map load and camera reset. No
-            // changes to pitch, FOV, fog, unit LOS or on-disk executable.
-            var location=new IntPtr(0x69d7bc);var original=new byte[4];
-            Require(ReadProcessMemory(pi.process,location,original,(UIntPtr)4,out count));
-            if(count.ToUInt64()!=4||BitConverter.ToSingle(original,0)!=36f)throw new InvalidDataException("카메라 기본 거리 검증 실패");
-            uint old,unused;Require(VirtualProtectEx(pi.process,location,(UIntPtr)4,4,out old));
+            // +0x18 is a world-space view span, NOT a fixed angle. Projection
+            // calculates 2*atan2(span/2,distance). Scale BOTH to retain the
+            // viewing angle while increasing the ground area shown.
+            var location=new IntPtr(0x69d7bc);var original=new byte[8];
+            Require(ReadProcessMemory(pi.process,location,original,(UIntPtr)8,out count));
+            if(count.ToUInt64()!=8||BitConverter.ToSingle(original,0)!=36f||BitConverter.ToSingle(original,4)!=26f)throw new InvalidDataException("카메라 거리·시야 기본값 검증 실패");
+            var values=new byte[8];Buffer.BlockCopy(BitConverter.GetBytes(cameraDistance),0,values,0,4);
+            Buffer.BlockCopy(BitConverter.GetBytes(26f*cameraPercent/100f),0,values,4,4);
+            uint old,unused;Require(VirtualProtectEx(pi.process,location,(UIntPtr)8,4,out old));
             try {
-              Require(WriteProcessMemory(pi.process,location,BitConverter.GetBytes(cameraDistance),(UIntPtr)4,out count));Require(count.ToUInt64()==4);
-              var verified=new byte[4];Require(ReadProcessMemory(pi.process,location,verified,(UIntPtr)4,out count));
-              if(count.ToUInt64()!=4||BitConverter.ToSingle(verified,0)!=cameraDistance)throw new InvalidDataException("카메라 거리 적용 확인 실패");
-            } finally {Require(VirtualProtectEx(pi.process,location,(UIntPtr)4,old,out unused));}
+              Require(WriteProcessMemory(pi.process,location,values,(UIntPtr)8,out count));Require(count.ToUInt64()==8);
+              var verified=new byte[8];Require(ReadProcessMemory(pi.process,location,verified,(UIntPtr)8,out count));
+              if(count.ToUInt64()!=8||BitConverter.ToString(verified)!=BitConverter.ToString(values))throw new InvalidDataException("카메라 거리·시야 적용 확인 실패");
+            } finally {Require(VirtualProtectEx(pi.process,location,(UIntPtr)8,old,out unused));}
           }
           if(multiplayer) {
             // Only the non-single-player initializer: push 3 -> push 2.

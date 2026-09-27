@@ -19,7 +19,7 @@ class CameraOptionTests {
     using(var form=(Form)Activator.CreateInstance(formType,true)) {
       var n=(NumericUpDown)formType.GetField("cameraPercent",BindingFlags.NonPublic|BindingFlags.Instance).GetValue(form);
       Check(n.Minimum==100&&n.Maximum==150&&n.Increment==5,"UI range");
-      foreach(Control c in form.Controls)Check(form.ClientRectangle.Contains(c.Bounds),"Control outside form: "+c.Text);
+      // DPI/wrapping/scrolling layout is covered by LauncherLayoutTests.
       using(var bitmap=new Bitmap(form.ClientSize.Width,form.ClientSize.Height)) {
         using(var g=Graphics.FromImage(bitmap))g.Clear(form.BackColor);
         foreach(Control c in form.Controls){var handle=c.Handle;c.DrawToBitmap(bitmap,c.Bounds);}
@@ -31,9 +31,10 @@ class CameraOptionTests {
     foreach(int percent in new[]{100,125,150}) {
       bool inspected=false;int pid=0;
       Action<Process> observe=p=>{
-        pid=p.Id;var bytes=new byte[4];UIntPtr read;
-        Check(ReadProcessMemory(p.Handle,new IntPtr(0x69d7bc),bytes,(UIntPtr)4,out read)&&read.ToUInt64()==4,"Camera read");
+        pid=p.Id;var bytes=new byte[8];UIntPtr read;
+        Check(ReadProcessMemory(p.Handle,new IntPtr(0x69d7bc),bytes,(UIntPtr)8,out read)&&read.ToUInt64()==8,"Camera read");
         Check(BitConverter.ToSingle(bytes,0)==36f*percent/100f,"Installed camera distance");
+        Check(BitConverter.ToSingle(bytes,4)==26f*percent/100f,"Installed view span");
         inspected=true;throw new OperationCanceledException("Probe complete; do not resume game");
       };
       try {patch.GetMethod("StartConfigured",flags).Invoke(null,new object[]{args[1],true,false,percent,observe});throw new Exception("Unexpected resume");}

@@ -13,8 +13,8 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Changpogo Launcher")]
 #if STABLE_RELEASE
-[assembly: AssemblyVersion("1.6.3.0")]
-[assembly: AssemblyFileVersion("1.6.3.0")]
+[assembly: AssemblyVersion("1.6.4.0")]
+[assembly: AssemblyFileVersion("1.6.4.0")]
 #elif MULTIPLAYER_75MS
 [assembly: AssemblyVersion("1.5.2.0")]
 [assembly: AssemblyFileVersion("1.5.2.0")]
@@ -39,7 +39,7 @@ namespace ChangpogoLauncher {
 
   sealed class LauncherForm : Form {
 #if STABLE_RELEASE
-    const string VersionText="1.6.3";
+    const string VersionText="1.6.4";
     const string ExperimentPeriod="75";
 #elif MULTIPLAYER_75MS
     const string VersionText="1.5.2";
@@ -144,7 +144,7 @@ namespace ChangpogoLauncher {
       row(new Control[]{display,captureMouse});row(new Control[]{widescreen});row(new Control[]{compatibility});row(new Control[]{diagnosticMode});row(new Control[]{multiplayerLatency});
       row(new Control[]{multiplayerTest});
       cameraPercent.MinimumSize=new Size(100,0);
-      row(new Control[]{new Label {Text="카메라 거리 (시험)",AutoSize=true},cameraPercent,new Label {Text="% (100~150)",AutoSize=true},resetCamera});
+      row(new Control[]{new Label {Text="카메라 시야 확대 (시험)",AutoSize=true},cameraPercent,new Label {Text="% (100~150)",AutoSize=true},resetCamera});
       row(new Control[]{new Label {Text="다음 실행부터 적용 · 이상 시 100%로 복원",AutoSize=true}});
       row(new Control[]{play,update,reports});
       log.Dock=DockStyle.Fill;log.MinimumSize=new Size(0,120);layout.Controls.Add(log,0,layout.RowCount++);
@@ -185,7 +185,7 @@ namespace ChangpogoLauncher {
         int camera=(int)cameraPercent.Value;
         SaveSetting("camera-distance-percent.txt",camera.ToString(System.Globalization.CultureInfo.InvariantCulture));
         process=SinglePlayerPatch.StartConfigured(source,commandLatency.Checked,false,camera,diagnostics==null?(Action<Process>)null:diagnostics.Attach);
-        WriteLog("카메라 거리: "+camera+"% ("+SinglePlayerPatch.CameraDistance(camera).ToString("0.##")+") / 저장 게임·연출에서는 별도 카메라가 사용될 수 있습니다.");
+        WriteLog("카메라 거리·시야 동시 확대: "+camera+"% / 새 게임 권장. 저장 게임·연출에서는 별도 카메라가 사용될 수 있습니다.");
         if(process==null)throw new InvalidOperationException("게임 프로세스를 시작하지 못했습니다.");
         mouseSession=new MouseCapture(process,captureMouse.Checked,WriteLog);
         if(showGameClock.Checked&&commandLatency.Checked)try {gameClock=new GameClockOverlay(process);}catch(Exception ex){WriteLog("게임 시간 표시 실패 (게임은 계속 실행): "+ex.Message);}
